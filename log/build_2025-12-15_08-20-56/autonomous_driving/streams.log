@@ -1,0 +1,26 @@
+[0.750s] Invoking command in '/workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving': PYTHONPATH=/workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/build --no-deps symlink_data
+[1.037s] running develop
+[1.214s] running egg_info
+[1.214s] creating autonomous_driving.egg-info
+[1.214s] writing autonomous_driving.egg-info/PKG-INFO
+[1.215s] writing dependency_links to autonomous_driving.egg-info/dependency_links.txt
+[1.215s] writing entry points to autonomous_driving.egg-info/entry_points.txt
+[1.215s] writing requirements to autonomous_driving.egg-info/requires.txt
+[1.215s] writing top-level names to autonomous_driving.egg-info/top_level.txt
+[1.215s] writing manifest file 'autonomous_driving.egg-info/SOURCES.txt'
+[1.217s] reading manifest file 'autonomous_driving.egg-info/SOURCES.txt'
+[1.218s] writing manifest file 'autonomous_driving.egg-info/SOURCES.txt'
+[1.220s] running build_ext
+[1.220s] Creating /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/python3.10/site-packages/autonomous-driving.egg-link (link to .)
+[1.221s] Installing keyboard_controller script to /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/autonomous_driving
+[1.221s] Installing lidar_cone_detector script to /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/autonomous_driving
+[1.221s] Installing simple_imu_listener script to /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/autonomous_driving
+[1.221s] 
+[1.222s] Installed /workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving
+[1.222s] running symlink_data
+[1.222s] creating /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/share/ament_index
+[1.222s] creating /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/share/ament_index/resource_index
+[1.222s] creating /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/share/ament_index/resource_index/packages
+[1.222s] symbolically linking /workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/resource/autonomous_driving -> /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/share/ament_index/resource_index/packages
+[1.222s] symbolically linking /workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/package.xml -> /workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/share/autonomous_driving
+[1.254s] Invoked command in '/workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving' returned '0': PYTHONPATH=/workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/workspace/ros2_ws/src/autonomous_driving/install/autonomous_driving/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /workspace/ros2_ws/src/autonomous_driving/build/autonomous_driving/build --no-deps symlink_data

@@ -1,0 +1,5 @@
+[console_scripts]
+keyboard_controller = autonomous_driving.keyboard_control:main
+lidar_cone_detector = autonomous_driving.lidar_listener:main
+simple_imu_listener = autonomous_driving.listener:main
+
