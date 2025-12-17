@@ -27,7 +27,9 @@ setup(
             'lidar_cone_detector = autonomous_driving.lidar_listener:main',
             'keyboard_controller = autonomous_driving.keyboard_control:main',
             'control_test = autonomous_driving.control_test:main',
-            'slam_node = autonomous_driving.slam_node:main'],
+            'slam_node = autonomous_driving.slam_node:main',
+            'planner_node = autonomous_driving.planner_node:main',
+            'waypoint_recorder = autonomous_driving.waypoint_recorder_auto:main'],
     },
 )
 
