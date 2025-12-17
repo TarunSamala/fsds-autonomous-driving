@@ -129,7 +129,7 @@ class SlamNode(Node):
         
         for marker_id, ((key_x, key_y), cone_data) in enumerate(self.cone_map.items()):
             marker = Marker()
-            marker.header.frame_id = "fsds/FScar"  # GLOBAL frame (from /testing_only/odom)
+            marker.header.frame_id = "fsds/FSCar"  # GLOBAL frame (from /testing_only/odom)
             marker.header.stamp = self.get_clock().now().to_msg()
             
             marker.ns = "global_cone_map"
