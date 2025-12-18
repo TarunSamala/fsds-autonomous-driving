@@ -29,7 +29,8 @@ setup(
             'control_test = autonomous_driving.control_test:main',
             'slam_node = autonomous_driving.slam_node:main',
             'planner_node = autonomous_driving.planner_node:main',
-            'waypoint_recorder = autonomous_driving.waypoint_recorder_auto:main'],
+            'waypoint_recorder = autonomous_driving.waypoint_recorder_auto:main',
+            'pure_pursuit = autonomous_driving.pure_pursuit_controller:main'],
     },
 )
 
