@@ -1,0 +1,29 @@
+slam_toolbox:
+  ros__parameters:
+    # Core parameters
+    mode: mapping  # NOT localization - you're building the map
+    odom_frame: odom
+    map_frame: map
+    base_frame: fsds/FSCar
+    scan_topic: /scan
+    
+    # Critical: Enable TF publishing
+    publish_map_to_odom_tf: true
+    publish_occupancy_grid: true
+    
+    # Map publishing
+    map_publish_period: 1.0
+    
+    # Solver settings
+    use_scan_matching: true
+    use_scan_barycenter: true
+    
+    # Loop closure
+    loop_search_maximum_distance: 10.0
+    do_loop_closing: true
+    
+    # Performance
+    transform_publish_period: 0.02
+    transform_timeout: 1.0
+    tf_buffer_duration: 30.0
+
