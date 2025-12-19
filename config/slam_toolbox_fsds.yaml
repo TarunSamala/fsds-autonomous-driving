@@ -1,15 +1,23 @@
 slam_toolbox:
   ros__parameters:
     # Core parameters
-    mode: mapping  # NOT localization - you're building the map
+    mode: mapping
     odom_frame: odom
     map_frame: map
     base_frame: fsds/FSCar
     scan_topic: /scan
     
+    # CRITICAL: Increase queue size for high-frequency scans
+    scan_queue_size: 100
+    
     # Critical: Enable TF publishing
     publish_map_to_odom_tf: true
     publish_occupancy_grid: true
+    
+    # TF buffer - allow more time for lookups
+    tf_buffer_duration: 30.0
+    transform_timeout: 0.2
+    transform_publish_period: 0.02
     
     # Map publishing
     map_publish_period: 1.0
@@ -22,8 +30,12 @@ slam_toolbox:
     loop_search_maximum_distance: 10.0
     do_loop_closing: true
     
-    # Performance
-    transform_publish_period: 0.02
-    transform_timeout: 1.0
-    tf_buffer_duration: 30.0
+    # Performance tuning
+    min_travel_distance: 0.1
+    min_travel_heading: 0.1
+    lag_in_seconds: 2.0
+    
+    # Occupancy grid
+    resolution: 0.05
+    map_start_pose: [0.0, 0.0, 0.0]
 

@@ -44,6 +44,8 @@ setup(
             'pure_pursuit = autonomous_driving.pure_pursuit_controller:main',
             'localization_node = autonomous_driving.localization_node:main',
             'waypoint_perfect = autonomous_driving.waypoint_recorder_perfect:main',
+            'odom_publisher = autonomous_driving.odom_publisher:main',
+            'scan_republisher = autonomous_driving.scan_republisher:main'
         ],
     },
 )
