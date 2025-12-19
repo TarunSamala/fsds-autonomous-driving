@@ -25,8 +25,8 @@ class PurePursuitController(Node):
             10
         )
         
-        self.look_ahead_distance = 0.8
-        self.max_steering_angle = 0.6
+        self.look_ahead_distance = 0.5
+        self.max_steering_angle = 0.7
         self.target_speed = 0.02
         
         self.path = []
