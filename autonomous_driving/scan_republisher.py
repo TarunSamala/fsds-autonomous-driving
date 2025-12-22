@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-Converts PointCloud2 to LaserScan for slam_toolbox compatibility.
-FSDS publishes /lidar/Lidar1 (PointCloud2)
-slam_toolbox expects /scan (LaserScan)
-This node bridges them.
+Fixed PointCloud2 to LaserScan converter for FSDS
+Properly creates uniform LaserScan with consistent angle bounds
 """
 
 import rclpy
@@ -29,58 +27,74 @@ class ScanRepublisher(Node):
         # Publish as LaserScan for slam_toolbox
         self.pub = self.create_publisher(LaserScan, '/scan', 10)
         
+        # Fixed scan parameters
+        self.angle_min = -math.pi
+        self.angle_max = math.pi
+        self.angle_increment = 2 * math.pi / 98  # 98 rays
+        self.num_rays = 98
+        
         self.get_logger().info('✅ Scan Republisher Started')
         self.get_logger().info('   Reading: /lidar/Lidar1 (PointCloud2)')
-        self.get_logger().info('   Publishing: /scan (LaserScan)')
+        self.get_logger().info('   Publishing: /scan (LaserScan with 98 rays)')
     
     def pointcloud_callback(self, msg: PointCloud2):
-        """Convert PointCloud2 to LaserScan"""
+        """Convert PointCloud2 to LaserScan with FIXED 98 rays"""
         
-        # Extract XYZ points from PointCloud2
+        # Extract XYZ points
         points = self.pointcloud2_to_xyz(msg)
         
         if len(points) == 0:
             return
         
-        # Project to 2D for laser scan (use X-Y plane)
-        # Calculate range (distance from origin) and angle
-        ranges = []
-        angles = []
+        # Initialize ranges array with max range (50m)
+        ranges = np.full(self.num_rays, 50.0, dtype=np.float32)
         
+        # Project 3D points to 2D polar coordinates
         for x, y, z in points:
-            # Skip points that are too high or too low (out of scanning plane)
-            if abs(z) > 0.5:  # 50cm above/below scanning plane
+            # Skip points outside scanning plane
+            if abs(z) > 0.5:
                 continue
             
+            # Calculate range and angle
             r = math.sqrt(x*x + y*y)
+            
+            # Skip too close or too far
+            if r < 0.1 or r > 50.0:
+                continue
+            
             theta = math.atan2(y, x)
             
-            if r > 0.1:  # Minimum range
-                ranges.append(r)
-                angles.append(theta)
-        
-        if len(ranges) == 0:
-            return
-        
-        # Sort by angle
-        sorted_indices = sorted(range(len(angles)), key=lambda i: angles[i])
-        sorted_ranges = [ranges[i] for i in sorted_indices]
-        sorted_angles = [angles[i] for i in sorted_indices]
+            # Map angle to ray index
+            # Normalize theta to [angle_min, angle_max]
+            if theta < self.angle_min:
+                theta += 2 * math.pi
+            if theta > self.angle_max:
+                theta -= 2 * math.pi
+            
+            # Find closest ray
+            ray_idx = int((theta - self.angle_min) / self.angle_increment)
+            ray_idx = max(0, min(self.num_rays - 1, ray_idx))
+            
+            # Keep minimum range for each ray
+            if r < ranges[ray_idx]:
+                ranges[ray_idx] = r
         
         # Create LaserScan message
         scan = LaserScan()
         scan.header.frame_id = 'fsds/Lidar1'
         scan.header.stamp = self.get_clock().now().to_msg()
         
-        # Set angle parameters
-        scan.angle_min = sorted_angles[0] if sorted_angles else -math.pi
-        scan.angle_max = sorted_angles[-1] if sorted_angles else math.pi
-        scan.angle_increment = 0.01  # ~0.57 degrees
+        # Fixed angle parameters
+        scan.angle_min = self.angle_min
+        scan.angle_max = self.angle_max
+        scan.angle_increment = self.angle_increment
         
-        # Set range parameters
+        # Range parameters
         scan.range_min = 0.1
         scan.range_max = 50.0
-        scan.ranges = sorted_ranges
+        
+        # Set ranges (98 rays, exactly)
+        scan.ranges = ranges.tolist()
         
         # Time info
         scan.time_increment = 0.0
@@ -106,6 +120,13 @@ class ScanRepublisher(Node):
                 x = struct.unpack_from('f', msg.data, base + offset_x)[0]
                 y = struct.unpack_from('f', msg.data, base + offset_y)[0]
                 z = struct.unpack_from('f', msg.data, base + offset_z)[0]
+                
+                # Skip NaN/Inf values
+                if math.isnan(x) or math.isnan(y) or math.isnan(z):
+                    continue
+                if math.isinf(x) or math.isinf(y) or math.isinf(z):
+                    continue
+                
                 points.append((x, y, z))
             except:
                 continue
