@@ -7,19 +7,17 @@ slam_toolbox:
     base_frame: fsds/FSCar
     scan_topic: /scan
     
-    # CRITICAL: Increase queue size for high-frequency scans
-    scan_queue_size: 100
+    # For async mode
+    scan_queue_size: 50
+    transform_tolerance: 0.5  # Allow 500ms timestamp mismatch
     
-    # Critical: Enable TF publishing
+    # Enable TF publishing
     publish_map_to_odom_tf: true
     publish_occupancy_grid: true
     
-    # TF buffer - allow more time for lookups
+    # TF parameters
     tf_buffer_duration: 30.0
-    transform_timeout: 0.2
     transform_publish_period: 0.02
-    
-    # Map publishing
     map_publish_period: 1.0
     
     # Solver settings
@@ -30,9 +28,10 @@ slam_toolbox:
     loop_search_maximum_distance: 10.0
     do_loop_closing: true
     
-    # Performance tuning
-    min_travel_distance: 0.1
-    min_travel_heading: 0.1
+    # Performance
+    minimum_time_interval: 0.5
+    minimum_travel_distance: 0.1
+    minimum_travel_heading: 0.1
     lag_in_seconds: 2.0
     
     # Occupancy grid

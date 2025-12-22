@@ -70,7 +70,7 @@ class ScanRepublisher(Node):
         # Create LaserScan message
         scan = LaserScan()
         scan.header.frame_id = 'fsds/Lidar1'
-        scan.header.stamp = msg.header.stamp
+        scan.header.stamp = self.get_clock().now().to_msg()
         
         # Set angle parameters
         scan.angle_min = sorted_angles[0] if sorted_angles else -math.pi
