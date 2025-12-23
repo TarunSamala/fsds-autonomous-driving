@@ -1,40 +1,30 @@
 slam_toolbox:
   ros__parameters:
-    # Core parameters
-    mode: mapping
+    # Input/Output
     odom_frame: odom
     map_frame: map
     base_frame: fsds/FSCar
     scan_topic: /scan
     
-    # For async mode
-    scan_queue_size: 50
-    transform_tolerance: 0.5  # Allow 500ms timestamp mismatch
-    
-    # Enable TF publishing
-    publish_map_to_odom_tf: true
-    publish_occupancy_grid: true
-    
-    # TF parameters
-    tf_buffer_duration: 30.0
-    transform_publish_period: 0.02
-    map_publish_period: 1.0
-    
-    # Solver settings
+    # Algorithm
     use_scan_matching: true
-    use_scan_barycenter: true
+    use_scan_bagging: false
+    minimum_travel_distance: 0.5
+    minimum_travel_heading: 0.5
+    
+    # Solver
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
     
     # Loop closure
-    loop_search_maximum_distance: 10.0
-    do_loop_closing: true
+    loop_search_max_linear_radius: 3.0
+    loop_search_max_angular_distance: 1.57
     
     # Performance
-    minimum_time_interval: 0.5
-    minimum_travel_distance: 0.1
-    minimum_travel_heading: 0.1
-    lag_in_seconds: 2.0
+    enable_interactive_mode: true
+    synchronize_scans: true
     
-    # Occupancy grid
-    resolution: 0.05
-    map_start_pose: [0.0, 0.0, 0.0]
-
+    # Position priors
+    use_tf_scan_transform_as_initial_guess: true
+    transform_publish_period: 0.02

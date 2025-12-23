@@ -47,7 +47,10 @@ setup(
             'odom_publisher = autonomous_driving.odom_publisher:main',
             'scan_republisher = autonomous_driving.scan_republisher:main',
             'grid_mapper = autonomous_driving.grid_mapper:main',
-            'mcl_localizer = autonomous_driving.mcl_localizer:main'
+            'mcl_localizer = autonomous_driving.mcl_localizer:main',
+            'mcl_localizer_v2 = autonomous_driving.mcl_localizer_v2:main',
+            'waypoint_follower = autonomous_driving.waypoint_follower:main',
+            'map_manager = autonomous_driving.map_manager:main'
         ],
     },
 )
