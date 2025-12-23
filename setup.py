@@ -45,7 +45,9 @@ setup(
             'localization_node = autonomous_driving.localization_node:main',
             'waypoint_perfect = autonomous_driving.waypoint_recorder_perfect:main',
             'odom_publisher = autonomous_driving.odom_publisher:main',
-            'scan_republisher = autonomous_driving.scan_republisher:main'
+            'scan_republisher = autonomous_driving.scan_republisher:main',
+            'grid_mapper = autonomous_driving.grid_mapper:main',
+            'mcl_localizer = autonomous_driving.mcl_localizer:main'
         ],
     },
 )
