@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-Stanley Controller for FSDS Waypoint Following
+Pure Pursuit Waypoint Follower - Smooth, Stable Racing
 
-Stanley controller = heading error + cross-track error control
-Better for car-like vehicles than Pure Pursuit
-
-References:
-- F1TENTH Lab 6 (Pure Pursuit variant)
-- Stanley Method papers
-- Cross-track error minimization
+Uses Pure Pursuit control law for smooth trajectory following.
+No oscillation, handles loops perfectly.
 """
 
 import rclpy
@@ -24,322 +19,224 @@ import time
 
 
 def euler_from_quaternion(quat):
-    """Extract yaw from quaternion."""
     x, y, z, w = quat.x, quat.y, quat.z, quat.w
     siny_cosp = 2 * (w * z + x * y)
     cosy_cosp = 1 - 2 * (y * y + z * z)
     return math.atan2(siny_cosp, cosy_cosp)
 
 
-class StanleyController(Node):
+class PurePursuitFollower(Node):
     def __init__(self):
-        super().__init__('waypoint_follower')
+        super().__init__('pure_pursuit_follower')
 
-        # Stanley Controller Parameters (TUNED FOR TIGHT TRACKING)
-        self.declare_parameter('base_speed', 0.02)           # Start VERY slow
-        self.declare_parameter('lookahead_distance', 0.6)    # Moderate lookahead
-        self.declare_parameter('k_e', 2.0)                   # Cross-track error gain (AGGRESSIVE)
-        self.declare_parameter('k_h', 1.5)                   # Heading error gain
-        self.declare_parameter('goal_tolerance', 1.0)        # Distance to goal
-
-        self.base_speed = self.get_parameter('base_speed').value
-        self.lookahead_distance = self.get_parameter('lookahead_distance').value
-        self.k_e = self.get_parameter('k_e').value           # Tuned for aggressive path tracking
-        self.k_h = self.get_parameter('k_h').value
-        self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        # Pure pursuit parameters
+        self.speed = 0.04
+        self.lookahead_distance = 0.8  # 80cm lookahead for smooth response
+        self.max_steering = 1.0
 
         # State
         self.waypoints = []
         self.current_pose = None
         self.current_yaw = 0.0
-        self.current_idx = 0
+        self.velocity_x = 0.0
         
         self.throttle = 0.0
         self.steering = 0.0
         self.brake = 0.0
-        
         self.kickstart_done = False
+        self.debug_counter = 0
+        self.lap_count = 0
+        self.last_wp_idx = 0
 
-        # Publishers
+        # Publishers/Subscriptions
         self.cmd_pub = self.create_publisher(ControlCommand, '/control_command', 10)
         self.markers_pub = self.create_publisher(MarkerArray, '/waypoint_markers', 10)
         self.path_pub = self.create_publisher(Path, '/follow_path', 10)
-
-        # Subscription
-        self.odom_sub = self.create_subscription(
-            Odometry, '/testing_only/odom', self.odom_callback, 10
-        )
+        self.odom_sub = self.create_subscription(Odometry, '/testing_only/odom', self.odom_callback, 10)
 
         # Timers
         self.control_timer = self.create_timer(0.1, self.publish_cmd)
-        self.follow_timer = self.create_timer(0.02, self.follow_waypoints)  # 50 Hz
-        self.vis_timer = self.create_timer(0.5, self.publish_visualization)
+        self.follow_timer = self.create_timer(0.02, self.follow_waypoints)  # 50Hz for smooth control
+        self.vis_timer = self.create_timer(1.0, self.publish_visualization)
 
         self.load_waypoints()
 
         print("=" * 80)
-        print("🚗 STANLEY CONTROLLER - TIGHT WAYPOINT TRACKING")
+        print("🏎️  PURE PURSUIT WAYPOINT FOLLOWER")
         print("=" * 80)
         print(f"✅ Loaded {len(self.waypoints)} waypoints")
-        if self.waypoints:
-            print(f"   First: ({self.waypoints[0][0]:.2f}, {self.waypoints[0][1]:.2f})")
-        print(f"   Base speed: {self.base_speed} (very slow for accuracy)")
-        print(f"   Cross-track error gain (k_e): {self.k_e} (AGGRESSIVE)")
-        print(f"   Heading error gain (k_h): {self.k_h}")
-        print("")
+        print(f"📏 Lookahead distance: {self.lookahead_distance}m")
+        print(f"🚗 Speed: {self.speed}")
         print("🚀 KICKSTART INITIATED!")
         print("=" * 80)
 
         self.kick_thread = threading.Thread(target=self.kickstart_sequence, daemon=True)
         self.kick_thread.start()
 
-    # ======================================================================
-    # KICKSTART
-    # ======================================================================
-
     def kickstart_sequence(self):
-        """Identical kickstart to keyboard_controller.py"""
         print("[KICKSTART] Throttle 0.2 for 0.5s...")
         for _ in range(5):
             msg = ControlCommand()
-            msg.throttle = 0.2
-            msg.steering = 0.0
-            msg.brake = 0.0
+            msg.throttle = 0.2; msg.steering = 0.0; msg.brake = 0.0
             self.cmd_pub.publish(msg)
             time.sleep(0.1)
 
         print("[KICKSTART] Brake 0.5 for 1.0s...")
         for _ in range(10):
             msg = ControlCommand()
-            msg.throttle = 0.0
-            msg.steering = 0.0
-            msg.brake = 0.5
+            msg.throttle = 0.0; msg.steering = 0.0; msg.brake = 0.5
             self.cmd_pub.publish(msg)
             time.sleep(0.1)
 
-        self.throttle = 0.0
-        self.steering = 0.0
-        self.brake = 0.0
         self.kickstart_done = True
-        print("✅ KICKSTART DONE - Stanley controller starting!")
-
-    # ======================================================================
-    # INITIALIZATION
-    # ======================================================================
+        print("✅ PURE PURSUIT ACTIVE!")
 
     def load_waypoints(self):
-        """Load waypoints from JSON."""
         try:
             with open('/workspace/ros2_ws/waypoints.json', 'r') as f:
                 data = json.load(f)
-            
-            self.waypoints = [[float(wp[0]), float(wp[1])] for wp in data]
-            print(f"📍 Loaded {len(self.waypoints)} waypoints")
+            self.waypoints = [[float(wp[0]), float(wp[1])] for wp in data if len(wp) >= 2]
+            print(f"📍 {len(self.waypoints)} waypoints loaded")
         except Exception as e:
-            print(f"❌ Failed to load: {e}")
-            self.waypoints = []
+            print(f"❌ Load error: {e}")
 
-    # ======================================================================
-    # CALLBACKS
-    # ======================================================================
-
-    def odom_callback(self, msg: Odometry):
-        """Update current pose from odometry."""
+    def odom_callback(self, msg):
         self.current_pose = msg.pose.pose
         self.current_yaw = euler_from_quaternion(msg.pose.pose.orientation)
+        self.velocity_x = msg.twist.twist.linear.x
 
-    # ======================================================================
-    # STANLEY CONTROLLER LOGIC
-    # ======================================================================
-
-    def find_closest_waypoint(self):
-        """Find index of closest waypoint."""
+    def find_closest_waypoint_index(self):
+        """Find closest waypoint to current position."""
         if self.current_pose is None or not self.waypoints:
             return 0
 
-        cx = self.current_pose.position.x
-        cy = self.current_pose.position.y
-
+        cx, cy = self.current_pose.position.x, self.current_pose.position.y
         min_dist = float('inf')
-        best_idx = self.current_idx
+        closest_idx = 0
 
-        start = max(0, self.current_idx - 20)
-        end = min(len(self.waypoints), self.current_idx + 40)
+        # Search in a window around last known position (more efficient)
+        search_range = 100
+        start = max(0, self.last_wp_idx - search_range)
+        end = min(len(self.waypoints), self.last_wp_idx + search_range)
 
         for i in range(start, end):
             wx, wy = self.waypoints[i]
             dist = math.hypot(wx - cx, wy - cy)
             if dist < min_dist:
                 min_dist = dist
-                best_idx = i
+                closest_idx = i
 
-        return best_idx
+        self.last_wp_idx = closest_idx
+        return closest_idx
 
-    def find_lookahead_point(self, start_idx):
+    def find_lookahead_waypoint(self, start_idx):
         """Find waypoint at lookahead_distance ahead."""
         if self.current_pose is None or not self.waypoints:
-            return None, None, None
+            return 0, None, None
 
-        cx = self.current_pose.position.x
-        cy = self.current_pose.position.y
+        cx, cy = self.current_pose.position.x, self.current_pose.position.y
 
-        for i in range(start_idx, len(self.waypoints)):
-            wx, wy = self.waypoints[i]
+        # Search forward from start_idx
+        best_idx = start_idx
+        for i in range(1, len(self.waypoints)):
+            idx = (start_idx + i) % len(self.waypoints)
+            wx, wy = self.waypoints[idx]
             dist = math.hypot(wx - cx, wy - cy)
+            
             if dist >= self.lookahead_distance:
-                return i, wx, wy
+                return idx, wx, wy
 
-        # Use last waypoint if none far enough
-        if len(self.waypoints) > 0:
-            i = len(self.waypoints) - 1
-            wx, wy = self.waypoints[i]
-            return i, wx, wy
-        return None, None, None
+        # Fallback: furthest point in range
+        return best_idx, self.waypoints[best_idx][0], self.waypoints[best_idx][1]
 
-    def compute_cross_track_error(self, closest_idx):
+    def pure_pursuit_control(self, lookahead_x, lookahead_y):
         """
-        Compute perpendicular distance from vehicle to the line
-        connecting closest_idx and closest_idx+1 waypoints.
+        Pure pursuit steering control.
         
-        Positive = left of path, Negative = right of path
-        """
-        if self.current_pose is None or not self.waypoints or closest_idx >= len(self.waypoints) - 1:
-            return 0.0
-
-        cx = self.current_pose.position.x
-        cy = self.current_pose.position.y
-
-        # Get line segment (closest waypoint to next waypoint)
-        x1, y1 = self.waypoints[closest_idx]
-        x2, y2 = self.waypoints[closest_idx + 1]
-
-        # Distance from point (cx, cy) to line segment
-        # Using perpendicular distance formula
-        dx = x2 - x1
-        dy = y2 - y1
-        
-        if dx == 0 and dy == 0:
-            return 0.0
-
-        # Perpendicular distance (cross product method)
-        numerator = abs(dy * cx - dx * cy + x2 * y1 - y2 * x1)
-        denominator = math.hypot(dx, dy)
-        cte = numerator / denominator
-
-        # Determine sign: is car left or right of path?
-        # Use cross product to determine side
-        cross = (x2 - x1) * (cy - y1) - (y2 - y1) * (cx - x1)
-        if cross < 0:
-            cte = -cte
-
-        return cte
-
-    def compute_heading_error(self, target_x, target_y):
-        """
-        Compute heading error between vehicle heading and direction to target.
-        Range: [-pi, pi]
-        """
-        dx = target_x - self.current_pose.position.x
-        dy = target_y - self.current_pose.position.y
-        
-        target_heading = math.atan2(dy, dx)
-        heading_error = target_heading - self.current_yaw
-
-        while heading_error > math.pi:
-            heading_error -= 2 * math.pi
-        while heading_error < -math.pi:
-            heading_error += 2 * math.pi
-
-        return heading_error
-
-    def compute_stanley_steering(self, closest_idx, target_x, target_y):
-        """
-        Stanley Controller:
-        
-        steering = heading_error + atan2(cross_track_error, speed)
-        
-        But since speed is low, use:
-        steering = k_h * heading_error + k_e * cross_track_error
-        
-        This gives aggressive cross-track error correction.
+        Geometry: Find the circle passing through car position and lookahead point.
+        Steering angle = arctan(2 * L * sin(alpha) / d)
+        where:
+          - L = lookahead distance
+          - alpha = angle to lookahead point
+          - d = lookahead distance (distance to lookahead point)
         """
         if self.current_pose is None:
             return 0.0
 
-        # Heading error component
-        heading_error = self.compute_heading_error(target_x, target_y)
-        heading_term = self.k_h * heading_error
-
-        # Cross-track error component
-        cte = self.compute_cross_track_error(closest_idx)
-        cte_term = self.k_e * cte
-
-        # Total steering
-        steering = heading_term + cte_term
-        steering = max(-1.0, min(1.0, steering))
-
-        return steering
+        cx, cy = self.current_pose.position.x, self.current_pose.position.y
+        
+        # Vector to lookahead point
+        dx = lookahead_x - cx
+        dy = lookahead_y - cy
+        
+        # Distance to lookahead point
+        d = math.hypot(dx, dy)
+        if d < 0.01:  # Too close
+            return 0.0
+        
+        # Angle to lookahead point in global frame
+        alpha = math.atan2(dy, dx)
+        
+        # Normalize angle error
+        angle_error = alpha - self.current_yaw
+        while angle_error > math.pi:
+            angle_error -= 2 * math.pi
+        while angle_error < -math.pi:
+            angle_error += 2 * math.pi
+        
+        # Pure pursuit law: steering = atan(2*L*sin(alpha)/d)
+        # Simplified: steering ≈ sin(alpha) for small angles
+        steering = math.atan2(2 * self.lookahead_distance * math.sin(angle_error), d)
+        
+        return max(-self.max_steering, min(self.max_steering, steering))
 
     def follow_waypoints(self):
-        """
-        50 Hz control loop using Stanley Controller.
-        """
         if not self.kickstart_done or self.current_pose is None or not self.waypoints:
-            return
-
-        # Find where we are
-        closest_idx = self.find_closest_waypoint()
-        self.current_idx = closest_idx
-
-        # Find lookahead target
-        _, target_x, target_y = self.find_lookahead_point(closest_idx)
-        if target_x is None:
             self.throttle = 0.0
-            self.brake = 0.8
             return
 
-        # Stanley steering control
-        self.steering = self.compute_stanley_steering(closest_idx, target_x, target_y)
+        # Find closest waypoint
+        closest_idx = self.find_closest_waypoint_index()
 
-        # Check goal
-        cx = self.current_pose.position.x
-        cy = self.current_pose.position.y
-        gx, gy = self.waypoints[-1]
-        dist_to_goal = math.hypot(gx - cx, gy - cy)
-
-        if dist_to_goal < self.goal_tolerance:
-            print("✅ GOAL REACHED!")
+        # Find lookahead waypoint
+        lookahead_idx, lx, ly = self.find_lookahead_waypoint(closest_idx)
+        if lx is None:
             self.throttle = 0.0
-            self.brake = 0.8
-            self.steering = 0.0
             return
 
-        # Simple constant speed (can add speed scaling later)
-        self.throttle = self.base_speed
+        # Compute steering using pure pursuit
+        self.steering = self.pure_pursuit_control(lx, ly)
+        self.throttle = self.speed
         self.brake = 0.0
 
+        # Lap detection
+        if lookahead_idx < self.last_wp_idx - len(self.waypoints) + 50:
+            self.lap_count += 1
+            print(f"🏁 LAP {self.lap_count + 1} STARTED!")
+
+        # Debug output
+        self.debug_counter += 1
+        if self.debug_counter % 50 == 0:
+            cx, cy = self.current_pose.position.x, self.current_pose.position.y
+            dist = math.hypot(lx - cx, ly - cy)
+            print(f"Closest:{closest_idx} → Lookahead:{lookahead_idx}({lx:.1f},{ly:.1f}) dist={dist:.2f}m steering={self.steering:.2f}")
+
     def publish_cmd(self):
-        """10 Hz: publish control command."""
         msg = ControlCommand()
         msg.throttle = float(self.throttle)
         msg.steering = float(self.steering)
         msg.brake = float(self.brake)
         self.cmd_pub.publish(msg)
 
-    # ======================================================================
-    # VISUALIZATION
-    # ======================================================================
-
     def publish_visualization(self):
-        """Publish markers and path for RViz."""
         if not self.waypoints or self.current_pose is None:
             return
 
-        cx = self.current_pose.position.x
-        cy = self.current_pose.position.y
-
-        # Waypoint markers
+        cx, cy = self.current_pose.position.x, self.current_pose.position.y
         markers = MarkerArray()
+
+        closest_idx = self.find_closest_waypoint_index()
+
         for i, (wx, wy) in enumerate(self.waypoints):
             m = Marker()
             m.header.frame_id = 'fsds/FSCar'
@@ -350,15 +247,15 @@ class StanleyController(Node):
             m.pose.position.x = float(wx)
             m.pose.position.y = float(wy)
             m.pose.position.z = 0.1
-            m.scale.x = m.scale.y = m.scale.z = 0.3
+            m.scale.x = m.scale.y = m.scale.z = 0.25
 
             dist = math.hypot(wx - cx, wy - cy)
-            if i == self.current_idx:
-                m.color.r, m.color.g, m.color.b = 1.0, 0.0, 0.0  # RED: closest
+            if i == closest_idx:
+                m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0  # RED: closest
             elif dist < self.lookahead_distance:
-                m.color.r, m.color.g, m.color.b = 1.0, 1.0, 0.0  # YELLOW: lookahead
+                m.color.r = 1.0; m.color.g = 1.0; m.color.b = 0.0  # YELLOW: lookahead zone
             else:
-                m.color.r, m.color.g, m.color.b = 0.0, 1.0, 0.0  # GREEN: ahead
+                m.color.r = 0.0; m.color.g = 1.0; m.color.b = 0.0  # GREEN
             m.color.a = 0.8
             markers.markers.append(m)
 
@@ -373,21 +270,24 @@ class StanleyController(Node):
             p.header = path.header
             p.pose.position.x = float(wx)
             p.pose.position.y = float(wy)
-            p.pose.orientation.w = 1.0
             path.poses.append(p)
         self.path_pub.publish(path)
 
 
 def main(args=None):
-    rclpy.init(args=args)
-    node = StanleyController()
     try:
+        rclpy.init(args=args)
+        node = PurePursuitFollower()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print("Shutting down...")
+        print("\n🛑 Stopped")
+    except Exception as e:
+        print(f"Error: {e}")
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except:
+            pass
 
 
 if __name__ == '__main__':
