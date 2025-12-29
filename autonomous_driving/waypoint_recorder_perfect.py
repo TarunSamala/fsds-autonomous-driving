@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Waypoint Recorder with Steering Angles
-Records: [[x, y, steering], ...] where steering is from /control_command
+Waypoint Recorder with Steering AND Throttle
+Records: [[x, y, throttle, steering], ...]
 """
 
 import rclpy
@@ -33,19 +33,19 @@ class PerfectWaypointRecorder(Node):
         
         self.waypoints = []
         self.last_waypoint_pos = None
-        self.last_steering = 0.0  # Track current steering command
-        self.min_distance = 0.2   # Record waypoint every 0.2m traveled
+        self.last_throttle = 0.0
+        self.last_steering = 0.0
+        self.min_distance = 0.15   # Record every 0.15m (more frequent)
         
         print("=" * 70)
-        print("🎯 PERFECT WAYPOINT RECORDER WITH STEERING")
+        print("🎯 WAYPOINT RECORDER WITH THROTTLE + STEERING")
         print("=" * 70)
-        print("Records: [[x, y, steering], ...]")
-        print("Where steering is from /control_command (normalized -1 to +1)")
+        print("Records: [[x, y, throttle, steering], ...]")
         print("")
         print("Commands:")
-        print("  'start'  - Start recording waypoints")
+        print("  'start'  - Start recording")
         print("  'stop'   - Stop recording")
-        print("  'save'   - Save waypoints to waypoints.json")
+        print("  'save'   - Save to waypoints.json")
         print("  'list'   - Show all waypoints")
         print("  'clear'  - Clear all waypoints")
         print("=" * 70)
@@ -56,7 +56,7 @@ class PerfectWaypointRecorder(Node):
         self.input_thread.start()
 
     def odom_callback(self, msg):
-        """Called on odometry update. Records waypoint if distance threshold met."""
+        """Record waypoint when distance threshold met."""
         if not self.recording:
             return
         
@@ -64,40 +64,37 @@ class PerfectWaypointRecorder(Node):
         y = msg.pose.pose.position.y
         
         if self.last_waypoint_pos is None:
-            # First waypoint
-            self.waypoints.append([x, y, self.last_steering])
+            self.waypoints.append([x, y, self.last_throttle, self.last_steering])
             self.last_waypoint_pos = [x, y]
-            print(f"✅ WP #{len(self.waypoints)}: ({x:.3f}, {y:.3f}) steering={self.last_steering:.3f}")
+            print(f"✅ WP #{len(self.waypoints)}: ({x:.3f}, {y:.3f}) throttle={self.last_throttle:.2f} steering={self.last_steering:.3f}")
         else:
-            # Check if we've traveled far enough
             dist = math.sqrt(
                 (x - self.last_waypoint_pos[0])**2 + 
                 (y - self.last_waypoint_pos[1])**2
             )
             if dist >= self.min_distance:
-                self.waypoints.append([x, y, self.last_steering])
+                self.waypoints.append([x, y, self.last_throttle, self.last_steering])
                 self.last_waypoint_pos = [x, y]
-                print(f"✅ WP #{len(self.waypoints)}: ({x:.3f}, {y:.3f}) steering={self.last_steering:.3f}")
+                print(f"✅ WP #{len(self.waypoints)}: ({x:.3f}, {y:.3f}) throttle={self.last_throttle:.2f} steering={self.last_steering:.3f}")
 
     def control_callback(self, msg: ControlCommand):
-        """Called on control command. Updates current steering value."""
+        """Update current throttle and steering."""
+        self.last_throttle = msg.throttle
         self.last_steering = msg.steering
 
     def input_loop(self):
-        """User input loop for commands."""
+        """User input loop."""
         while rclpy.ok():
             cmd = input(">> ").strip().lower()
             
             if cmd == 'start':
                 self.recording = True
                 self.last_waypoint_pos = None
-                self.last_steering = 0.0
-                print("🔴 RECORDING STARTED - Drive slowly and smoothly!")
-                print("   (steering angles will be captured from /control_command)")
+                print("🔴 RECORDING STARTED - Drive at comfortable speed!")
             
             elif cmd == 'stop':
                 self.recording = False
-                print(f"⏹️  RECORDING STOPPED - {len(self.waypoints)} waypoints recorded")
+                print(f"⏹️  RECORDING STOPPED - {len(self.waypoints)} waypoints")
             
             elif cmd == 'save':
                 if len(self.waypoints) == 0:
@@ -105,28 +102,23 @@ class PerfectWaypointRecorder(Node):
                 else:
                     with open('/workspace/ros2_ws/waypoints.json', 'w') as f:
                         json.dump(self.waypoints, f, indent=2)
-                    print(f"💾 Saved {len(self.waypoints)} waypoints to waypoints.json")
-                    print("   Format: [[x, y, steering], ...]")
-                    print(f"   Steering range: {min(w[2] for w in self.waypoints):.3f} to {max(w[2] for w in self.waypoints):.3f}")
+                    print(f"💾 Saved {len(self.waypoints)} waypoints")
+                    print(f"   Format: [[x, y, throttle, steering], ...]")
+                    throttles = [w[2] for w in self.waypoints]
+                    steerings = [w[3] for w in self.waypoints]
+                    print(f"   Throttle range: {min(throttles):.3f} to {max(throttles):.3f}")
+                    print(f"   Steering range: {min(steerings):.3f} to {max(steerings):.3f}")
             
             elif cmd == 'list':
                 print(f"\nTotal: {len(self.waypoints)} waypoints")
                 for i, wp in enumerate(self.waypoints):
-                    if len(wp) == 3:
-                        print(f"  [{i:3d}] ({wp[0]:8.3f}, {wp[1]:8.3f}) steering={wp[2]:7.3f}")
-                    else:
-                        print(f"  [{i:3d}] ({wp[0]:8.3f}, {wp[1]:8.3f})")
+                    print(f"  [{i:3d}] x={wp[0]:8.3f} y={wp[1]:8.3f} throttle={wp[2]:5.2f} steering={wp[3]:7.3f}")
                 print()
             
             elif cmd == 'clear':
                 self.waypoints = []
                 self.last_waypoint_pos = None
-                self.last_steering = 0.0
                 print("🗑️  Cleared all waypoints")
-            
-            else:
-                if cmd:  # Only complain if non-empty
-                    print(f"❌ Unknown command: '{cmd}'. Try: start, stop, save, list, clear")
 
 
 def main(args=None):
@@ -137,3 +129,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
