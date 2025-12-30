@@ -50,7 +50,8 @@ setup(
             'mcl_localizer = autonomous_driving.mcl_localizer:main',
             'mcl_localizer_v2 = autonomous_driving.mcl_localizer_v2:main',
             'waypoint_follower = autonomous_driving.waypoint_follower:main',
-            'map_manager = autonomous_driving.map_manager:main'
+            'map_manager = autonomous_driving.map_manager:main',
+            'localized_follower = autonomous_driving.localized_follower:main'
         ],
     },
 )
