@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-LOCALIZED Pure Pursuit - Uses Cone Map for Position Correction
+PRODUCTION Follower - FIXED Timer Bug
 """
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
-from visualization_msgs.msg import MarkerArray
 from fs_msgs.msg import ControlCommand
-import numpy as np
-import math
 import json
+import math
 import threading
 import time
 
@@ -22,62 +20,59 @@ def euler_from_quaternion(quat):
     return math.atan2(siny_cosp, cosy_cosp)
 
 
-class LocalizedPurePursuit(Node):
+class ProductionFollower(Node):
     def __init__(self):
-        super().__init__('localized_follower')
+        super().__init__('production_follower')
 
-        # Parameters
-        self.speed = 0.035
+        self.speed = 0.04
         self.lookahead_distance = 0.6
-        self.cone_tolerance = 1.5  # Use cones within 1.5m for localization
+        self.kp_steering = 1.2
+        
+        # Load assets
+        self.waypoints = self.load_json('/workspace/ros2_ws/waypoints.json')
+        self.cone_map = self.load_json('/workspace/ros2_ws/cone_map.json')
+        
+        print(f"✅ Loaded {len(self.waypoints)} waypoints")
+        print(f"✅ Loaded {len(self.cone_map)} cones")
         
         # State
-        self.waypoints = []
-        self.cone_map = {}  # From SLAM: (x,y) → cone_data
         self.odom_pose = None
         self.odom_yaw = 0.0
-        self.localized_pose = None  # Corrected pose
+        self.debug_counter = 0
         
         self.throttle = 0.0
         self.steering = 0.0
         self.brake = 0.0
         self.kickstart_done = False
 
-        # Load waypoints
-        self.load_waypoints()
-        
         # Publishers/Subscriptions
         self.cmd_pub = self.create_publisher(ControlCommand, '/control_command', 10)
         self.odom_sub = self.create_subscription(
             Odometry, '/testing_only/odom', self.odom_callback, 10
         )
-        self.cones_sub = self.create_subscription(
-            MarkerArray, '/cone_map', self.cones_callback, 10
-        )
 
-        # Timers
         self.control_timer = self.create_timer(0.05, self.control_loop)
-        
-        print("=" * 80)
-        print("🗺️  LOCALIZED PURE PURSUIT - CONE CORRECTION")
-        print("=" * 80)
-        print(f"✅ Loaded {len(self.waypoints)} waypoints")
-        print("🔍 Using /cone_map for localization correction")
-        print("🚀 KICKSTART...")
-        
         self.kickstart()
 
+    def load_json(self, filename):
+        try:
+            with open(filename, 'r') as f:
+                data = json.load(f)
+            return [[float(p[0]), float(p[1])] for p in data]
+        except:
+            self.get_logger().warn(f"No {filename}")
+            return []
+
     def kickstart(self):
-        """Quick kickstart then autonomous."""
         def kick():
-            # Throttle burst
+            print("[KICKSTART] 0.25 throttle...")
             for _ in range(3):
                 msg = ControlCommand()
                 msg.throttle = 0.25; msg.steering = 0.0; msg.brake = 0.0
                 self.cmd_pub.publish(msg)
                 time.sleep(0.1)
             
-            # Brake
+            print("[KICKSTART] Brake...")
             for _ in range(8):
                 msg = ControlCommand()
                 msg.throttle = 0.0; msg.steering = 0.0; msg.brake = 0.4
@@ -85,112 +80,64 @@ class LocalizedPurePursuit(Node):
                 time.sleep(0.1)
                 
             self.kickstart_done = True
-            print("✅ LOCALIZED CONTROL ACTIVE!")
+            print("✅ PRODUCTION RACING ACTIVE! 🏎️🔄")
             
-        thread = threading.Thread(target=kick, daemon=True)
-        thread.start()
-
-    def load_waypoints(self):
-        try:
-            with open('/workspace/ros2_ws/waypoints.json', 'r') as f:
-                data = json.load(f)
-            self.waypoints = np.array([[float(wp[0]), float(wp[1])] for wp in data])
-            print(f"📍 {len(self.waypoints)} waypoints loaded")
-        except:
-            print("⚠️ No waypoints - will use cone centerline")
+        threading.Thread(target=kick, daemon=True).start()
 
     def odom_callback(self, msg):
         self.odom_pose = msg.pose.pose
         self.odom_yaw = euler_from_quaternion(msg.pose.pose.orientation)
 
-    def cones_callback(self, msg):
-        """Update cone map from SLAM."""
-        self.cone_map.clear()
-        for marker in msg.markers:
-            if marker.ns == "global_cone_map":
-                self.cone_map[(marker.pose.position.x, marker.pose.position.y)] = True
-
-    def localize_with_cones(self):
-        """Correct odometry using nearby cones."""
-        if self.odom_pose is None or len(self.cone_map) < 10:
-            self.localized_pose = self.odom_pose
-            return
+    def find_closest_waypoint(self):
+        if not self.waypoints or self.odom_pose is None:
+            return 0, float('inf')
             
-        ox, oy = self.odom_pose.position.x, self.odom_pose.position.y
-        
-        # Find nearby cones
-        nearby_cones = []
-        for cx, cy in self.cone_map.keys():
-            dist = math.hypot(cx - ox, cy - oy)
-            if dist < self.cone_tolerance:
-                nearby_cones.append([cx, cy])
-                
-        if len(nearby_cones) < 3:
-            self.localized_pose = self.odom_pose
-            return
-            
-        # Estimate lateral offset using cone distribution
-        cones = np.array(nearby_cones)
-        cone_center_x = np.mean(cones[:, 0])
-        cone_center_y = np.mean(cones[:, 1])
-        
-        # Correct lateral position toward cone centerline
-        lateral_error = oy - cone_center_y
-        corrected_y = oy - 0.3 * lateral_error  # 30% correction gain
-        
-        # Update localized pose
-        self.localized_pose = self.odom_pose
-        self.localized_pose.position.y = corrected_y
-
-    def find_lookahead_point(self):
-        """Find lookahead waypoint using localized pose."""
-        if self.localized_pose is None or len(self.waypoints) == 0:
-            return 0.0, 0.0
-            
-        lx, ly = self.localized_pose.position.x, self.localized_pose.position.y
-        
-        closest_idx = 0
+        cx, cy = self.odom_pose.position.x, self.odom_pose.position.y
         min_dist = float('inf')
+        closest_idx = 0
         
-        # Find closest waypoint
         for i, (wx, wy) in enumerate(self.waypoints):
-            dist = math.hypot(wx - lx, wy - ly)
+            dist = math.hypot(wx - cx, wy - cy)
             if dist < min_dist:
                 min_dist = dist
                 closest_idx = i
                 
-        # Find lookahead point
+        return closest_idx, min_dist
+
+    def find_lookahead(self, closest_idx):
+        cx, cy = self.odom_pose.position.x, self.odom_pose.position.y
+        
         for i in range(closest_idx, len(self.waypoints)):
-            wx, wy = self.waypoints[i % len(self.waypoints)]
-            dist = math.hypot(wx - lx, wy - ly)
+            idx = i % len(self.waypoints)
+            wx, wy = self.waypoints[idx]
+            dist = math.hypot(wx - cx, wy - cy)
             if dist > self.lookahead_distance:
-                return wx, wy
+                return wx, wy, idx
                 
-        # Fallback
-        return self.waypoints[closest_idx]
+        return self.waypoints[closest_idx][0], self.waypoints[closest_idx][1], closest_idx
 
     def control_loop(self):
-        if not self.kickstart_done or self.localized_pose is None:
+        if not self.kickstart_done or self.odom_pose is None:
             return
-            
-        # 1. Localize using cones
-        self.localize_with_cones()
+
+        # Find target
+        closest_idx, dist_to_track = self.find_closest_waypoint()
+        tx, ty, target_idx = self.find_lookahead(closest_idx)
         
-        # 2. Find lookahead
-        lx, ly = self.find_lookahead_point()
+        # Pure pursuit steering
+        dx = tx - self.odom_pose.position.x
+        dy = ty - self.odom_pose.position.y
+        target_angle = math.atan2(dy, dx)
         
-        # 3. Pure pursuit steering
-        dx = lx - self.localized_pose.position.x
-        dy = ly - self.localized_pose.position.y
+        angle_error = target_angle - self.odom_yaw
+        angle_error = (angle_error + math.pi) % (2*math.pi) - math.pi
         
-        angle_error = math.atan2(dy, dx) - self.odom_yaw
-        angle_error = (angle_error + math.pi) % (2 * math.pi) - math.pi
-        
-        self.steering = math.tan(angle_error) * self.lookahead_distance
+        self.steering = self.kp_steering * math.sin(angle_error)
         self.steering = max(-1.0, min(1.0, self.steering))
         
-        # 4. Speed control
-        self.throttle = self.speed
+        # Speed control
+        speed_factor = max(0.3, 1.0 - dist_to_track * 0.5)
+        self.throttle = self.speed * speed_factor
         self.brake = 0.0
         
         # Publish
@@ -199,11 +146,15 @@ class LocalizedPurePursuit(Node):
         msg.steering = float(self.steering)
         msg.brake = float(self.brake)
         self.cmd_pub.publish(msg)
-
+        
+        # FIXED Debug counter
+        self.debug_counter += 1
+        if self.debug_counter % 100 == 0:
+            print(f"Track:{dist_to_track:.2f}m → Target:{target_idx} steer:{self.steering:.2f} speed:{self.throttle:.3f}")
 
 def main():
     rclpy.init()
-    node = LocalizedPurePursuit()
+    node = ProductionFollower()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
