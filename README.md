@@ -31,7 +31,6 @@ GPU:        NVIDIA RTX 3050 Laptop Mobile
 RAM:        16 GB
 Storage:    NVMe SSD, 35GB+ free
 Display:    X11 (not Wayland)
-Network:    WiFi 192.168.1.9
 ```
 
 ### Software Stack
