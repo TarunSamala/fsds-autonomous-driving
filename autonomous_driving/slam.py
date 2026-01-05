@@ -63,7 +63,7 @@ class SlamV2Node(Node):
         self.declare_parameter('merge_distance', 0.15)  # Larger for coarse cones
         self.declare_parameter('loop_closure_distance', 0.5)  # Distance to trigger loop closure
         self.declare_parameter('observation_threshold', 3)  # Min observations to publish
-        self.declare_parameter('map_frame', 'fsds/map')
+        self.declare_parameter('map_frame', 'fsds/FSCar')
         self.declare_parameter('odom_frame', 'fsds/FSCar')
         
         self.merge_distance = self.get_parameter('merge_distance').value
