@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 """
-Waypoint Recorder Perfect v2 - SLAM-Integrated
+Waypoint Recorder Perfect v3 - Multi-Lap Support
 
-- Records clean waypoints from SLAM-corrected odometry
-- Auto-closes loop when back at start (within 1.5m)
-- Fixes rclpy shutdown race condition
-- Compatible with waypoint_follower Pure Pursuit controller
+- Records waypoints for multiple laps WITHOUT overlap
+- Uses hysteresis state machine (SEARCHING → IN_LAP → SEARCHING)
+- Auto-closes loop ONLY on final return to start
+- Compatible with waypoint_follower Pure Pursuit
 """
 
 import rclpy
@@ -27,7 +27,7 @@ def euler_from_quaternion(quat):
 
 
 class WaypointRecorderPerfect(Node):
-    """Record clean waypoints for autonomous following"""
+    """Record clean waypoints for multiple laps without overlap"""
 
     def __init__(self):
         super().__init__('waypoint_recorder_perfect')
@@ -36,10 +36,14 @@ class WaypointRecorderPerfect(Node):
         self.waypoints = []
         self.start_x = None
         self.start_y = None
-        self.loop_distance_threshold = 1.5  # 1.5m to close loop
-        self.min_waypoints_before_close = 100
-        self.waypoint_spacing = 0.2  # 20cm between waypoints
         
+        # Multi-lap state machine (same as SLAM)
+        self.lap_state = "SEARCHING"  # SEARCHING or IN_LAP
+        self.lap_distance_threshold = 1.5  # Close loop at 1.5m
+        self.min_waypoints_before_close = 150  # Must record 150+ before considering close
+        self.distance_before_in_lap = 10.0  # Must travel 10m before entering IN_LAP
+        
+        self.waypoint_spacing = 0.2  # 20cm between waypoints
         self.current_pose = None
         self.current_yaw = 0.0
         self.recording_active = True
@@ -57,10 +61,10 @@ class WaypointRecorderPerfect(Node):
         self.timer = self.create_timer(0.1, self.record_waypoint)
 
         self.get_logger().info("=" * 80)
-        self.get_logger().info("🎯 WAYPOINT RECORDER PERFECT - SLAM INTEGRATED")
+        self.get_logger().info("🎯 WAYPOINT RECORDER PERFECT v3 - MULTI-LAP SUPPORT")
         self.get_logger().info("=" * 80)
-        self.get_logger().info("📝 Drive around track with SLAM running")
-        self.get_logger().info(f"🎯 Loop closes when within {self.loop_distance_threshold}m of start")
+        self.get_logger().info("📝 Drive multiple laps - waypoints won't overlap!")
+        self.get_logger().info(f"🔄 Loop closes ONLY on return to start after full lap")
         self.get_logger().info(f"📏 Waypoint spacing: {self.waypoint_spacing}m")
         self.get_logger().info("=" * 80)
 
@@ -78,8 +82,17 @@ class WaypointRecorderPerfect(Node):
         dy = self.current_pose.position.y - self.start_y
         return math.hypot(dx, dy)
 
+    def distance_traveled(self) -> float:
+        """Calculate distance traveled from start"""
+        if self.start_x is None or self.current_pose is None:
+            return 0.0
+        
+        dx = self.current_pose.position.x - self.start_x
+        dy = self.current_pose.position.y - self.start_y
+        return abs(dx) + abs(dy)  # Manhattan distance for conservative estimate
+
     def record_waypoint(self):
-        """Record waypoints at regular intervals"""
+        """Record waypoints with multi-lap hysteresis logic"""
         if self.current_pose is None or not self.recording_active:
             return
 
@@ -92,37 +105,48 @@ class WaypointRecorderPerfect(Node):
             self.start_y = y
             self.waypoints.append([x, y])
             self.get_logger().info(f"✅ START recorded: ({x:.2f}, {y:.2f})")
+            self.get_logger().info(f"   State: SEARCHING → waiting for 10m travel")
             self.publish_visualization()
             return
 
-        # Check if close enough to start to close loop
+        # Multi-lap state machine
+        dist_traveled = self.distance_traveled()
         dist_to_start = self.distance_to_start()
-        
-        if (len(self.waypoints) > self.min_waypoints_before_close and
-            dist_to_start < self.loop_distance_threshold):
-            
-            self.get_logger().info(f"\n🏁 LOOP DETECTED! dist_to_start={dist_to_start:.2f}m")
-            self.get_logger().info(f"✅ Recorded {len(self.waypoints)} waypoints")
-            self.recording_active = False
-            self.save_waypoints()
-            self.timer.cancel()  # Stop recording
-            return
 
-        # Add waypoint if far enough from last one
-        if not self.waypoints or math.hypot(
-            x - self.waypoints[-1][0], 
-            y - self.waypoints[-1][1]
-        ) > self.waypoint_spacing:
-            
-            self.waypoints.append([x, y])
-            self.publish_visualization()
+        if self.lap_state == "SEARCHING":
+            # Waiting for car to leave start zone
+            if dist_traveled > self.distance_before_in_lap:
+                self.lap_state = "IN_LAP"
+                self.get_logger().info(f"   ✅ ENTERED LAP (traveled {dist_traveled:.1f}m)")
 
-        # Status update every 20 waypoints
-        if len(self.waypoints) % 20 == 0:
-            self.get_logger().info(
-                f"📍 Recorded {len(self.waypoints)} waypoints | "
-                f"Dist to start: {dist_to_start:.2f}m"
-            )
+        elif self.lap_state == "IN_LAP":
+            # In lap - check if returned to start
+            if (len(self.waypoints) > self.min_waypoints_before_close and
+                dist_to_start < self.lap_distance_threshold):
+                
+                self.get_logger().info(f"\n🏁 LOOP DETECTED! dist_to_start={dist_to_start:.2f}m")
+                self.get_logger().info(f"✅ Recorded {len(self.waypoints)} waypoints")
+                self.recording_active = False
+                self.save_waypoints()
+                self.timer.cancel()
+                return
+            
+            # Still in lap - add waypoint if far enough
+            if not self.waypoints or math.hypot(
+                x - self.waypoints[-1][0], 
+                y - self.waypoints[-1][1]
+            ) > self.waypoint_spacing:
+                
+                self.waypoints.append([x, y])
+                self.publish_visualization()
+
+            # Status update every 20 waypoints
+            if len(self.waypoints) % 20 == 0:
+                self.get_logger().info(
+                    f"📍 Recorded {len(self.waypoints)} waypoints | "
+                    f"Dist to start: {dist_to_start:.2f}m | "
+                    f"State: IN_LAP"
+                )
 
     def publish_visualization(self):
         """Publish waypoints as markers and path for RViz"""
@@ -194,7 +218,7 @@ class WaypointRecorderPerfect(Node):
                 json.dump(self.waypoints, f, indent=2)
             
             self.get_logger().info(f"💾 SAVED PERFECT LOOP: {filename}")
-            self.get_logger().info(f"✅ {len(self.waypoints)} waypoints")
+            self.get_logger().info(f"✅ {len(self.waypoints)} waypoints (NO OVERLAP)")
             self.get_logger().info(f"📏 Final gap: {self.distance_to_start():.2f}m")
             
         except Exception as e:
