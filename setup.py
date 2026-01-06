@@ -37,7 +37,8 @@ setup(
             'scan_republisher = autonomous_driving.scan_republisher:main',
             'waypoint_recorder_perfect = autonomous_driving.waypoint_recorder_perfect:main',
             'waypoint_follower = autonomous_driving.waypoint_follower:main',
-            'slam = autonomous_driving.slam:main'
+            'slam = autonomous_driving.slam:main',
+            'slam_map_publisher = autonomous_driving.slam_map_publisher:main'
         ],
     },
 )
