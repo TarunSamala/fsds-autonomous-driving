@@ -38,7 +38,8 @@ setup(
             'waypoint_recorder_perfect = autonomous_driving.waypoint_recorder_perfect:main',
             'waypoint_follower = autonomous_driving.waypoint_follower:main',
             'slam = autonomous_driving.slam:main',
-            'slam_map_publisher = autonomous_driving.slam_map_publisher:main'
+            'slam_map_publisher = autonomous_driving.slam_map_publisher:main',
+            'cone_follower = autonomous_driving.cone_follower:main'
         ],
     },
 )
