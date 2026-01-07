@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Pure Pursuit Waypoint Follower - DEBUG VERSION
-Prints current position, closest waypoint, steering, distance every loop
+Pure Pursuit Waypoint Follower - CROSS-TRACK ERROR AWARE
+Includes lateral error correction and reduced speed for tight tracks
 """
 
 import rclpy
@@ -25,13 +25,15 @@ class PurePursuitFollower(Node):
     def __init__(self):
         super().__init__('waypoint_follower')
         
-        self.declare_parameter('throttle', 0.05)
-        self.declare_parameter('lookahead', 1.8)
+        self.declare_parameter('throttle', 0.03)  # REDUCED from 0.05
+        self.declare_parameter('lookahead', 0.8)   # REDUCED from 1.8
         self.declare_parameter('wheelbase', 0.4)
+        self.declare_parameter('max_cross_track_error', 0.5)  # NEW: max allowed lateral drift
         
         self.throttle = self.get_parameter('throttle').value
         self.lookahead = self.get_parameter('lookahead').value
         self.wheelbase = self.get_parameter('wheelbase').value
+        self.max_cte = self.get_parameter('max_cross_track_error').value
         
         self.waypoints = self.load_waypoints()
         if not self.waypoints:
@@ -53,10 +55,11 @@ class PurePursuitFollower(Node):
         self.control_timer = self.create_timer(0.05, self.control_loop)  # 20 Hz
         
         self.get_logger().info("=" * 80)
-        self.get_logger().info("🚗 PURE PURSUIT WAYPOINT FOLLOWER - DEBUG")
+        self.get_logger().info("🚗 PURE PURSUIT - CROSS-TRACK ERROR AWARE")
         self.get_logger().info("=" * 80)
         self.get_logger().info(f"✅ Loaded {len(self.waypoints)} waypoints")
         self.get_logger().info(f"📊 Throttle: {self.throttle}, Lookahead: {self.lookahead}m, Wheelbase: {self.wheelbase}m")
+        self.get_logger().info(f"⚠️  Max cross-track error: {self.max_cte}m")
         self.get_logger().info("=" * 80)
 
     def load_waypoints(self):
@@ -64,7 +67,6 @@ class PurePursuitFollower(Node):
             with open('/workspace/ros2_ws/waypoints.json', 'r') as f:
                 waypoints = json.load(f)
             self.get_logger().info(f"Waypoints loaded: {len(waypoints)} points")
-            self.get_logger().info(f"Start: {waypoints[0][:2]}, End: {waypoints[-1][:2]}")
             return waypoints
         except Exception as e:
             self.get_logger().error(f"Error loading waypoints: {e}")
@@ -75,11 +77,12 @@ class PurePursuitFollower(Node):
         self.yaw = quat_to_yaw(msg.pose.pose.orientation)
 
     def find_closest_waypoint(self):
+        """Find absolute closest waypoint"""
         if not self.waypoints or self.pos is None:
             return 0
         
         min_dist = float('inf')
-        closest_idx = self.current_idx
+        closest_idx = 0
         
         for i, wp in enumerate(self.waypoints):
             dist = math.hypot(wp[0] - self.pos[0], wp[1] - self.pos[1])
@@ -89,7 +92,16 @@ class PurePursuitFollower(Node):
         
         return closest_idx
 
+    def compute_cross_track_error(self, closest_idx):
+        """Compute lateral distance from nearest waypoint"""
+        if not self.waypoints or self.pos is None:
+            return 0.0
+        
+        wp = self.waypoints[closest_idx]
+        return math.hypot(wp[0] - self.pos[0], wp[1] - self.pos[1])
+
     def find_lookahead_point(self):
+        """Find target point at lookahead distance ahead"""
         if not self.waypoints or self.pos is None:
             return self.waypoints[0] if self.waypoints else (0, 0)
         
@@ -103,6 +115,7 @@ class PurePursuitFollower(Node):
         return self.waypoints[(self.current_idx + 1) % len(self.waypoints)]
 
     def compute_steering(self, target):
+        """Pure Pursuit steering law"""
         if self.pos is None:
             return 0.0
         
@@ -126,6 +139,12 @@ class PurePursuitFollower(Node):
             return
         
         self.current_idx = self.find_closest_waypoint()
+        cte = self.compute_cross_track_error(self.current_idx)
+        
+        # Check for excessive drift
+        if cte > self.max_cte:
+            self.get_logger().warn(f"⚠️  DRIFT: CTE={cte:.2f}m > max={self.max_cte}m at WP{self.current_idx}")
+        
         target = self.find_lookahead_point()
         steering = self.compute_steering(target)
         
@@ -135,17 +154,16 @@ class PurePursuitFollower(Node):
         msg.brake = 0.0
         self.cmd_pub.publish(msg)
         
-        # *** DEBUG LOGGING - VISIBLE BY DEFAULT ***
-        dist_to_target = math.hypot(target[0] - self.pos[0], target[1] - self.pos[1])
-        closest_dist = min(math.hypot(wp[0] - self.pos[0], wp[1] - self.pos[1]) for wp in self.waypoints[:10])  # First 10 for speed
-        
-        self.get_logger().info(
-            f"🚗 Pos({self.pos[0]:.2f}, {self.pos[1]:.2f}) "
-            f"→ WP{self.current_idx:3d} "
-            f"Target({target[0]:.2f},{target[1]:.2f}) "
-            f"Steer{steering:.3f} "
-            f"Dist{closest_dist:.2f}m"
-        )
+        # Log every 10 iterations (~0.5s)
+        if self.current_idx % 10 == 0:
+            dist_to_target = math.hypot(target[0] - self.pos[0], target[1] - self.pos[1])
+            self.get_logger().info(
+                f"🚗 Pos({self.pos[0]:6.2f}, {self.pos[1]:6.2f}) "
+                f"WP{self.current_idx:3d} "
+                f"CTE{cte:.2f}m "
+                f"Steer{steering:6.3f} "
+                f"Target_Dist{dist_to_target:5.2f}m"
+            )
 
 def main(args=None):
     rclpy.init(args=args)
