@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Cone-Boundary Following Autonomous Controller
-Segments track into left/right cone pairs, finds centerline, follows it
-Works on closed oval tracks
+Universal Cone Detector + Track Follower
+Works regardless of LiDAR frame orientation
 """
 
 import math
@@ -20,47 +19,40 @@ from visualization_msgs.msg import MarkerArray, Marker
 import struct
 
 
-class ConeTrackFollower(Node):
+class UniversalConeFollower(Node):
     def __init__(self):
-        super().__init__('cone_track_follower')
+        super().__init__('universal_cone_follower')
         
-        # Parameters
         self.declare_parameter('throttle', 0.035)
         self.declare_parameter('max_steering', 0.42)
         self.declare_parameter('wheelbase', 0.3302)
-        self.declare_parameter('lookahead_distance', 2.0)
-        self.declare_parameter('cone_pairing_dist', 2.0)
-        self.declare_parameter('track_width_max', 4.0)
+        self.declare_parameter('lookahead', 2.0)
         
         self.throttle = self.get_parameter('throttle').value
         self.max_steering = self.get_parameter('max_steering').value
         self.wheelbase = self.get_parameter('wheelbase').value
-        self.lookahead_distance = self.get_parameter('lookahead_distance').value
-        self.cone_pairing_dist = self.get_parameter('cone_pairing_dist').value
-        self.track_width_max = self.get_parameter('track_width_max').value
+        self.lookahead = self.get_parameter('lookahead').value
         
         # State
         self.current_pos = np.array([0.0, 0.0])
         self.current_yaw = 0.0
         self.speed = 0.0
         
-        # Cone tracking
-        self.left_cones = deque(maxlen=50)
-        self.right_cones = deque(maxlen=50)
-        self.centerline_path = []
+        # All detected points
+        self.all_points = []
+        self.left_cluster = []
+        self.right_cluster = []
+        self.centerline = []
         
-        # Debug
-        self.last_diag = self.get_clock().now()
+        # Diagnostics
         self.frame_count = 0
         
-        # QoS
         qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=5
         )
         
-        # Subscribers
         self.lidar_sub = self.create_subscription(
             PointCloud2,
             '/lidar/Lidar1',
@@ -82,21 +74,27 @@ class ConeTrackFollower(Node):
             10
         )
         
-        self.path_pub = self.create_publisher(
-            Path,
-            '/centerline_path',
+        self.all_points_pub = self.create_publisher(
+            MarkerArray,
+            '/all_lidar_points',
             10
         )
         
-        self.left_cones_pub = self.create_publisher(
+        self.left_pub = self.create_publisher(
             MarkerArray,
-            '/detected_left_cones',
+            '/left_cluster',
             10
         )
         
-        self.right_cones_pub = self.create_publisher(
+        self.right_pub = self.create_publisher(
             MarkerArray,
-            '/detected_right_cones',
+            '/right_cluster',
+            10
+        )
+        
+        self.centerline_pub = self.create_publisher(
+            MarkerArray,
+            '/centerline_markers',
             10
         )
         
@@ -106,272 +104,256 @@ class ConeTrackFollower(Node):
             10
         )
         
-        self.get_logger().info("🏎️  Cone-Track Follower Started")
-        self.get_logger().info(f"   Throttle: {self.throttle}")
-        self.get_logger().info(f"   Lookahead: {self.lookahead_distance}m")
+        self.get_logger().info("🚀 UNIVERSAL Cone Follower - STARTING")
     
     def odom_callback(self, msg: Odometry):
-        """Update robot state"""
         self.current_pos = np.array([
             msg.pose.pose.position.x,
             msg.pose.pose.position.y
         ])
-        
         q = msg.pose.pose.orientation
-        self.current_yaw = self.quaternion_to_yaw(q.x, q.y, q.z, q.w)
-        
-        self.speed = math.hypot(
-            msg.twist.twist.linear.x,
-            msg.twist.twist.linear.y
-        )
+        self.current_yaw = math.atan2(2*(q.w*q.z + q.x*q.y), 1 - 2*(q.y*q.y + q.z*q.z))
+        self.speed = math.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
     
     def lidar_callback(self, msg: PointCloud2):
-        """Extract cones and compute steering"""
-        points = self.parse_pointcloud2(msg)
+        self.frame_count += 1
         
-        # Extract left/right cones
-        self.extract_cones(points)
+        # Parse all points
+        self.all_points = self.parse_pointcloud2(msg)
         
-        # Build centerline
-        self.centerline_path = self.compute_centerline()
+        if self.frame_count == 1:
+            self.get_logger().info(f"✅ Got {len(self.all_points)} points from LiDAR")
+            if len(self.all_points) > 0:
+                pts = np.array(self.all_points)
+                self.get_logger().info(f"   X range: {pts[:, 0].min():.2f} to {pts[:, 0].max():.2f}")
+                self.get_logger().info(f"   Y range: {pts[:, 1].min():.2f} to {pts[:, 1].max():.2f}")
+                self.get_logger().info(f"   Z range: {pts[:, 2].min():.2f} to {pts[:, 2].max():.2f}")
         
-        # Find target point
-        target = self.find_target_point()
+        # Cluster by height (cones have peaks)
+        self.cluster_by_height()
+        
+        # Pair clusters to find centerline
+        self.centerline = self.compute_centerline_from_clusters()
+        
+        # Get target
+        target = self.find_target()
         
         if target is not None:
-            # Compute steering
             steering = self.compute_steering(target)
-            self.publish_visualizations()
         else:
             steering = 0.0
         
+        # Visualize
+        self.publish_all_visualizations()
         self.publish_control(steering)
         
-        self.frame_count += 1
-        if (self.get_clock().now() - self.last_diag).nanoseconds > 3e9:
+        # Debug every 10 frames
+        if self.frame_count % 10 == 1:
             self.get_logger().info(
-                f"🏁 L:{len(self.left_cones)} R:{len(self.right_cones)} "
-                f"Path:{len(self.centerline_path)} Speed:{self.speed:.2f}m/s"
+                f"📊 Frame {self.frame_count}: "
+                f"L={len(self.left_cluster)} R={len(self.right_cluster)} "
+                f"Center={len(self.centerline)} Steer={steering:.3f}"
             )
-            self.last_diag = self.get_clock().now()
     
-    def extract_cones(self, points):
-        """Separate LiDAR points into left/right cones"""
-        self.left_cones.clear()
-        self.right_cones.clear()
+    def cluster_by_height(self):
+        """Find cone peaks by Z-height clustering"""
+        if len(self.all_points) == 0:
+            self.left_cluster = []
+            self.right_cluster = []
+            return
         
-        for x, y, z in points:
-            # Cone height filter
-            if not (0.05 < z < 0.8):
-                continue
-            
-            # Distance filter
-            dist = math.hypot(x, y)
-            if dist > 10.0 or dist < 0.2:
-                continue
-            
-            cone = np.array([x, y])
-            
-            # Separate by Y
-            if y > 0.15:  # Left (positive Y)
-                self.left_cones.append(cone)
-            elif y < -0.15:  # Right (negative Y)
-                self.right_cones.append(cone)
+        pts = np.array(self.all_points)
+        
+        # Filter by Z (cones are elevated)
+        mask = (pts[:, 2] > 0.05) & (pts[:, 2] < 0.8)
+        cone_points = pts[mask]
+        
+        if len(cone_points) == 0:
+            self.left_cluster = []
+            self.right_cluster = []
+            return
+        
+        # Split by Y (left vs right)
+        # Use MEDIAN Y to decide which is "left" and which is "right"
+        median_y = np.median(cone_points[:, 1])
+        
+        left = cone_points[cone_points[:, 1] > median_y]
+        right = cone_points[cone_points[:, 1] < median_y]
+        
+        # Compute centroids
+        if len(left) > 0:
+            self.left_cluster = [np.mean(left, axis=0)[:2]]  # Just X, Y
+        else:
+            self.left_cluster = []
+        
+        if len(right) > 0:
+            self.right_cluster = [np.mean(right, axis=0)[:2]]
+        else:
+            self.right_cluster = []
+        
+        if self.frame_count == 1:
+            self.get_logger().info(f"   Cone points after Z filter: {len(cone_points)}")
+            self.get_logger().info(f"   Median Y: {median_y:.3f}")
+            self.get_logger().info(f"   Left cluster: {len(left)} pts → centroid {self.left_cluster}")
+            self.get_logger().info(f"   Right cluster: {len(right)} pts → centroid {self.right_cluster}")
     
-    def compute_centerline(self):
-        """Compute centerline by pairing left/right cones"""
-        if len(self.left_cones) < 2 or len(self.right_cones) < 2:
+    def compute_centerline_from_clusters(self):
+        """Simple: midpoint between left and right clusters"""
+        if len(self.left_cluster) == 0 or len(self.right_cluster) == 0:
             return []
         
+        # If we have per-frame clusters, compute centerline
         centerline = []
         
-        # Sort cones by X (forward direction)
-        left_sorted = sorted(self.left_cones, key=lambda c: c[0])
-        right_sorted = sorted(self.right_cones, key=lambda c: c[0])
-        
-        # Pair cones and compute midpoints
-        for left_cone in left_sorted:
-            # Find closest right cone at similar X
-            distances = [
-                abs(left_cone[0] - right_cone[0]) +
-                0.5 * abs(left_cone[1] - right_cone[1])
-                for right_cone in right_sorted
-            ]
-            
-            if len(distances) == 0:
-                continue
-            
-            closest_idx = np.argmin(distances)
-            closest_dist = distances[closest_idx]
-            
-            # Check if pairing is valid
-            if closest_dist > self.cone_pairing_dist:
-                continue
-            
-            right_cone = right_sorted[closest_idx]
-            
-            # Compute centerline point
-            center = (left_cone + right_cone) / 2.0
-            
-            # Check track width
-            track_width = abs(left_cone[1] - right_cone[1])
-            if track_width > self.track_width_max:
-                continue
-            
-            centerline.append(center)
+        for left_pt in self.left_cluster:
+            for right_pt in self.right_cluster:
+                center = (left_pt + right_pt) / 2.0
+                centerline.append(center)
         
         return centerline
     
-    def find_target_point(self):
-        """Find target point ahead at lookahead distance"""
-        if len(self.centerline_path) == 0:
+    def find_target(self):
+        if len(self.centerline) == 0:
             return None
         
-        # Find closest point on centerline
-        distances = [
-            np.linalg.norm(p - self.current_pos)
-            for p in self.centerline_path
-        ]
-        closest_idx = np.argmin(distances)
+        # Find closest centerline point
+        dists = [np.linalg.norm(np.array(p) - self.current_pos) for p in self.centerline]
+        closest_idx = np.argmin(dists)
         
-        # Find point at lookahead distance ahead
+        # Look ahead
         target_idx = closest_idx
-        for i in range(closest_idx, len(self.centerline_path)):
-            dist = np.linalg.norm(
-                self.centerline_path[i] - self.current_pos
-            )
-            if dist >= self.lookahead_distance:
+        for i in range(closest_idx, len(self.centerline)):
+            if np.linalg.norm(np.array(self.centerline[i]) - self.current_pos) >= self.lookahead:
                 target_idx = i
                 break
-        else:
-            # Lookahead beyond centerline - extrapolate
-            if len(self.centerline_path) > 1:
-                target_idx = len(self.centerline_path) - 1
-            else:
-                return self.centerline_path[0]
         
-        return self.centerline_path[target_idx]
+        return self.centerline[target_idx]
     
     def compute_steering(self, target):
-        """Stanley steering control"""
-        # Vector to target
+        target = np.array(target)
         to_target = target - self.current_pos
-        dist_to_target = np.linalg.norm(to_target)
+        dist = np.linalg.norm(to_target)
         
-        if dist_to_target < 0.01:
+        if dist < 0.01:
             return 0.0
         
-        to_target = to_target / dist_to_target
-        
-        # Heading error
+        to_target = to_target / dist
         target_yaw = math.atan2(to_target[1], to_target[0])
-        heading_error = target_yaw - self.current_yaw
+        heading_err = target_yaw - self.current_yaw
         
-        # Normalize
-        while heading_error > math.pi:
-            heading_error -= 2 * math.pi
-        while heading_error < -math.pi:
-            heading_error += 2 * math.pi
+        while heading_err > math.pi:
+            heading_err -= 2 * math.pi
+        while heading_err < -math.pi:
+            heading_err += 2 * math.pi
         
-        # Cross-track error (perpendicular distance to line)
-        cte = self.cross_track_error(target)
+        cte = target[1] - self.current_pos[1]
         
-        # Stanley control law
-        k_stanley = 0.8
+        k = 1.0
         if self.speed > 0.05:
-            steering = heading_error + math.atan2(k_stanley * cte, max(self.speed, 0.1))
+            steering = heading_err + math.atan2(k * cte, max(self.speed, 0.1))
         else:
-            steering = heading_error
+            steering = heading_err
         
-        # Clamp
         steering = max(-self.max_steering, min(self.max_steering, steering))
         
-        # Publish target
-        target_msg = PointStamped()
-        target_msg.header.frame_id = "fsds/FSCar"
-        target_msg.header.stamp = self.get_clock().now().to_msg()
-        target_msg.point.x = target[0]
-        target_msg.point.y = target[1]
-        target_msg.point.z = 0.0
-        self.target_pub.publish(target_msg)
+        t = PointStamped()
+        t.header.frame_id = "fsds/FSCar"
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.point.x = target[0]
+        t.point.y = target[1]
+        self.target_pub.publish(t)
         
         return steering
     
-    def cross_track_error(self, target):
-        """Cross-track error (lateral deviation)"""
-        # Simple: Y-distance to target
-        return target[1] - self.current_pos[1]
-    
-    def publish_visualizations(self):
-        """Publish cones and centerline for RViz"""
-        # Publish centerline path
-        if len(self.centerline_path) > 0:
-            path_msg = Path()
-            path_msg.header.frame_id = "fsds/FSCar"
-            path_msg.header.stamp = self.get_clock().now().to_msg()
-            
-            for point in self.centerline_path:
-                pose = PoseStamped()
-                pose.pose.position.x = float(point[0])
-                pose.pose.position.y = float(point[1])
-                pose.pose.orientation.w = 1.0
-                path_msg.poses.append(pose)
-            
-            self.path_pub.publish(path_msg)
+    def publish_all_visualizations(self):
+        """Visualize EVERYTHING to debug"""
+        now = self.get_clock().now().to_msg()
         
-        # Publish left cones
+        # 1. All LiDAR points (small white dots)
+        all_markers = MarkerArray()
+        for i, pt in enumerate(self.all_points[:500]):  # Limit to 500 for performance
+            m = Marker()
+            m.header.frame_id = "fsds/FSCar"
+            m.header.stamp = now
+            m.id = i
+            m.type = Marker.SPHERE
+            m.pose.position.x = float(pt[0])
+            m.pose.position.y = float(pt[1])
+            m.pose.position.z = float(pt[2])
+            m.scale.x = 0.05
+            m.scale.y = 0.05
+            m.scale.z = 0.05
+            m.color.r = 1.0
+            m.color.g = 1.0
+            m.color.b = 1.0
+            m.color.a = 0.3
+            all_markers.markers.append(m)
+        self.all_points_pub.publish(all_markers)
+        
+        # 2. Left cluster (green)
         left_markers = MarkerArray()
-        for i, cone in enumerate(self.left_cones):
-            marker = Marker()
-            marker.header.frame_id = "fsds/FSCar"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = i
-            marker.type = Marker.CYLINDER
-            marker.action = Marker.ADD
-            marker.pose.position.x = float(cone[0])
-            marker.pose.position.y = float(cone[1])
-            marker.pose.position.z = 0.15
-            marker.scale.x = 0.2
-            marker.scale.y = 0.2
-            marker.scale.z = 0.3
-            marker.color.r = 0.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
-            marker.color.a = 0.8
-            left_markers.markers.append(marker)
-        self.left_cones_pub.publish(left_markers)
+        for i, pt in enumerate(self.left_cluster):
+            m = Marker()
+            m.header.frame_id = "fsds/FSCar"
+            m.header.stamp = now
+            m.id = i
+            m.type = Marker.SPHERE
+            m.pose.position.x = float(pt[0])
+            m.pose.position.y = float(pt[1])
+            m.pose.position.z = 0.2
+            m.scale.x = 0.3
+            m.scale.y = 0.3
+            m.scale.z = 0.3
+            m.color.g = 1.0
+            m.color.a = 1.0
+            left_markers.markers.append(m)
+        self.left_pub.publish(left_markers)
         
-        # Publish right cones
+        # 3. Right cluster (red)
         right_markers = MarkerArray()
-        for i, cone in enumerate(self.right_cones):
-            marker = Marker()
-            marker.header.frame_id = "fsds/FSCar"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = i
-            marker.type = Marker.CYLINDER
-            marker.action = Marker.ADD
-            marker.pose.position.x = float(cone[0])
-            marker.pose.position.y = float(cone[1])
-            marker.pose.position.z = 0.15
-            marker.scale.x = 0.2
-            marker.scale.y = 0.2
-            marker.scale.z = 0.3
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            marker.color.a = 0.8
-            right_markers.markers.append(marker)
-        self.right_cones_pub.publish(right_markers)
+        for i, pt in enumerate(self.right_cluster):
+            m = Marker()
+            m.header.frame_id = "fsds/FSCar"
+            m.header.stamp = now
+            m.id = i
+            m.type = Marker.SPHERE
+            m.pose.position.x = float(pt[0])
+            m.pose.position.y = float(pt[1])
+            m.pose.position.z = 0.2
+            m.scale.x = 0.3
+            m.scale.y = 0.3
+            m.scale.z = 0.3
+            m.color.r = 1.0
+            m.color.a = 1.0
+            right_markers.markers.append(m)
+        self.right_pub.publish(right_markers)
+        
+        # 4. Centerline (blue)
+        center_markers = MarkerArray()
+        for i, pt in enumerate(self.centerline):
+            m = Marker()
+            m.header.frame_id = "fsds/FSCar"
+            m.header.stamp = now
+            m.id = i
+            m.type = Marker.SPHERE
+            m.pose.position.x = float(pt[0])
+            m.pose.position.y = float(pt[1])
+            m.pose.position.z = 0.3
+            m.scale.x = 0.4
+            m.scale.y = 0.4
+            m.scale.z = 0.4
+            m.color.b = 1.0
+            m.color.a = 1.0
+            center_markers.markers.append(m)
+        self.centerline_pub.publish(center_markers)
     
     def publish_control(self, steering):
-        """Publish control"""
         cmd = ControlCommand()
         cmd.steering = steering
         cmd.throttle = self.throttle
         self.control_pub.publish(cmd)
     
     def parse_pointcloud2(self, msg: PointCloud2):
-        """Parse PointCloud2"""
         points = []
         field_dict = {f.name: f.offset for f in msg.fields}
         
@@ -391,21 +373,16 @@ class ConeTrackFollower(Node):
                 pass
         
         return points
-    
-    @staticmethod
-    def quaternion_to_yaw(x, y, z, w):
-        """Quaternion to yaw"""
-        return math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
 
 
 def main(args=None):
     rclpy.init(args=args)
-    follower = ConeTrackFollower()
+    follower = UniversalConeFollower()
     
     try:
         rclpy.spin(follower)
     except KeyboardInterrupt:
-        print("\n✋ Controller stopped")
+        print("\n✋ Stopped")
     finally:
         follower.destroy_node()
         rclpy.shutdown()
