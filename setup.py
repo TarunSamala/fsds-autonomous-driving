@@ -31,17 +31,11 @@ setup(
     entry_points={
         'console_scripts': [
             'lidar_cone_detector = autonomous_driving.lidar_listener:main',
-            'slam_node = autonomous_driving.slam_node:main',
             'keyboard_controller = autonomous_driving.keyboard_control:main',
-            'odom_publisher = autonomous_driving.odom_publisher:main',
             'scan_republisher = autonomous_driving.scan_republisher:main',
-            'waypoint_recorder_perfect = autonomous_driving.waypoint_recorder_perfect:main',
-            'waypoint_follower = autonomous_driving.waypoint_follower:main',
-            'slam = autonomous_driving.slam:main',
-            'slam_map_publisher = autonomous_driving.slam_map_publisher:main',
-            'cone_follower = autonomous_driving.cone_follower:main',
             'fsds_state_estimator = autonomous_driving.fsds_state_estimator:main',
-            'fsds_cone_detector = autonomous_driving.fsds_cone_detector:main'
+            'fsds_cone_detector = autonomous_driving.fsds_cone_detector:main',
+            'local_track_model = autonomous_driving.local_track_model:main'
         ],
     },
 )
