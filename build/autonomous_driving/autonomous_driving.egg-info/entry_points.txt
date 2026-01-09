@@ -1,5 +1,13 @@
 [console_scripts]
+cone_follower = autonomous_driving.cone_follower:main
+fsds_state_estimator = autonomous_driving.fsds_state_estimator:main
 keyboard_controller = autonomous_driving.keyboard_control:main
 lidar_cone_detector = autonomous_driving.lidar_listener:main
-simple_imu_listener = autonomous_driving.listener:main
+odom_publisher = autonomous_driving.odom_publisher:main
+scan_republisher = autonomous_driving.scan_republisher:main
+slam = autonomous_driving.slam:main
+slam_map_publisher = autonomous_driving.slam_map_publisher:main
+slam_node = autonomous_driving.slam_node:main
+waypoint_follower = autonomous_driving.waypoint_follower:main
+waypoint_recorder_perfect = autonomous_driving.waypoint_recorder_perfect:main
 
