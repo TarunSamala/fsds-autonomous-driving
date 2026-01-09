@@ -11,9 +11,19 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 
 class FsdsConeDetector(Node):
+    """
+    Phase 2 – Perception (FSDS)
+
+    - Consumes LiDAR PointCloud2
+    - Clusters cone points
+    - Publishes cone centroids as MarkerArray
+    - NO control, NO mapping, NO odometry coupling
+    """
+
     def __init__(self):
         super().__init__('fsds_cone_detector')
 
+        # Subscriber
         self.sub = self.create_subscription(
             PointCloud2,
             '/lidar/Lidar1',
@@ -21,43 +31,50 @@ class FsdsConeDetector(Node):
             10
         )
 
+        # Publishers
         self.left_pub = self.create_publisher(
             MarkerArray,
             '/left_cones',
             10
         )
-
         self.right_pub = self.create_publisher(
             MarkerArray,
             '/right_cones',
             10
         )
 
-        self.get_logger().info("✅ FSDS Cone Detector started")
+        # Clustering parameters (FSDS-proven)
+        self.cluster_radius = 0.20   # meters
+        self.min_cluster_pts = 5
 
-        # Clustering params (conservative)
-        self.cluster_radius = 0.25   # meters
-        self.min_cluster_pts = 6
+        self.get_logger().info("✅ FSDS Cone Detector started (Phase 2)")
+
+    # ------------------------------------------------------------
 
     def lidar_cb(self, msg: PointCloud2):
-        pts = self.pointcloud_to_xyz(msg)
+        pts = self.pointcloud2_to_xyz(msg)
         if pts.size == 0:
             return
 
-        # --- Filter geometry ---
-        x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
-        r = np.sqrt(x**2 + y**2)
+        # --- FSDS-CORRECT FILTERING ---
+        z = pts[:, 2]
+        r = np.linalg.norm(pts[:, :2], axis=1)
 
         mask = (
-            (z > 0.05) & (z < 0.6) &
-            (r > 0.5) & (r < 20.0)
+            (z > -0.3) & (z < 0.3) &
+            (r > 0.5) & (r < 15.0)
         )
 
         pts = pts[mask]
+
+        self.get_logger().debug(
+            f"LiDAR pts total={len(msg.data)//msg.point_step}, after filter={pts.shape[0]}"
+        )
+
         if pts.shape[0] < self.min_cluster_pts:
             return
 
-        # --- Cluster ---
+        # --- CLUSTER ---
         clusters = self.euclidean_clustering(pts)
 
         left_centroids = []
@@ -66,20 +83,22 @@ class FsdsConeDetector(Node):
         for c in clusters:
             centroid = np.mean(c, axis=0)
 
-            # FSDS semantic:
-            #   Y > 0 → LEFT (blue)
-            #   Y < 0 → RIGHT (yellow)
+            # FSDS semantic convention
+            #   +Y → LEFT (blue)
+            #   -Y → RIGHT (yellow)
             if centroid[1] > 0.0:
                 left_centroids.append(centroid)
             else:
                 right_centroids.append(centroid)
 
-        self.left_pub.publish(self.make_markers(left_centroids, color='blue'))
-        self.right_pub.publish(self.make_markers(right_centroids, color='yellow'))
+        # Publish
+        self.left_pub.publish(self.make_markers(left_centroids, "blue"))
+        self.right_pub.publish(self.make_markers(right_centroids, "yellow"))
 
-    # ---------------- Helpers ----------------
+    # ------------------------------------------------------------
 
-    def pointcloud_to_xyz(self, msg: PointCloud2):
+    def pointcloud2_to_xyz(self, msg: PointCloud2):
+        """Convert PointCloud2 → (N,3) numpy array"""
         if msg.point_step < 12:
             return np.empty((0, 3), dtype=np.float32)
 
@@ -99,7 +118,10 @@ class FsdsConeDetector(Node):
 
         return pts
 
+    # ------------------------------------------------------------
+
     def euclidean_clustering(self, pts):
+        """Simple Euclidean clustering (no sklearn)"""
         clusters = []
         used = np.zeros(len(pts), dtype=bool)
 
@@ -116,7 +138,9 @@ class FsdsConeDetector(Node):
                 cluster.append(pts[idx])
 
                 dists = np.linalg.norm(pts - pts[idx], axis=1)
-                neighbors = np.where((dists < self.cluster_radius) & (~used))[0]
+                neighbors = np.where(
+                    (dists < self.cluster_radius) & (~used)
+                )[0]
 
                 for n in neighbors:
                     used[n] = True
@@ -127,14 +151,22 @@ class FsdsConeDetector(Node):
 
         return clusters
 
+    # ------------------------------------------------------------
+
     def make_markers(self, centroids, color):
         arr = MarkerArray()
         now = self.get_clock().now().to_msg()
 
+        # Clear old markers
+        clear = Marker()
+        clear.action = Marker.DELETEALL
+        arr.markers.append(clear)
+
         for i, c in enumerate(centroids):
             m = Marker()
-            m.header.frame_id = "fsds/FSCar"
+            m.header.frame_id = 'fsds/Lidar1'   # IMPORTANT (TF-safe)
             m.header.stamp = now
+            m.ns = color
             m.id = i
             m.type = Marker.CYLINDER
             m.action = Marker.ADD
@@ -148,13 +180,18 @@ class FsdsConeDetector(Node):
             m.scale.y = 0.23
             m.scale.z = 0.4
 
-            if color == 'blue':
+            if color == "blue":
                 m.color.b = 1.0
             else:
                 m.color.r = 1.0
                 m.color.g = 1.0
 
-            m.color.a = 0.9
+            m.color.a = 1.0
+
+            # Prevent RViz accumulation
+            m.lifetime.sec = 0
+            m.lifetime.nanosec = int(0.2 * 1e9)
+
             arr.markers.append(m)
 
         return arr
