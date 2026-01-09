@@ -39,7 +39,8 @@ setup(
             'waypoint_follower = autonomous_driving.waypoint_follower:main',
             'slam = autonomous_driving.slam:main',
             'slam_map_publisher = autonomous_driving.slam_map_publisher:main',
-            'cone_follower = autonomous_driving.cone_follower:main'
+            'cone_follower = autonomous_driving.cone_follower:main',
+            'fsds_state_estimator = autonomous_driving.fsds_state_estimator:main'
         ],
     },
 )
