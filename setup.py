@@ -36,7 +36,8 @@ setup(
             'fsds_state_estimator = autonomous_driving.fsds_state_estimator:main',
             'fsds_cone_detector = autonomous_driving.fsds_cone_detector:main',
             'local_track_model = autonomous_driving.local_track_model:main',
-            'fsds_local_track_model = autonomous_driving.fsds_local_track_model:main'
+            'fsds_local_track_model = autonomous_driving.fsds_local_track_model:main',
+            'fsds_stanley_controller = autonomous_driving.fsds_stanley_controller:main'
         ],
     },
 )
