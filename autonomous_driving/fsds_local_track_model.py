@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-FSDS Local Track Model (Phase 3)
+FSDS Local Track Model — Phase 3 (STABILIZED)
 
-Converts transient cone detections into:
-- persistent left/right tracks
-- a stable, forward-only local centerline
+Consumes cone data published by fsds_cone_detector
+and builds a persistent local track + centerline.
 
-NO control logic.
-NO global mapping.
-Pure geometry.
+- Visualization markers are filtered
+- Tracks persist for debugging (2.5s)
+- Forward-only, ego-frame geometry
 """
 
 import time
@@ -31,46 +30,55 @@ class LocalTrackModel(Node):
             MarkerArray, '/right_cones', self.right_cb, 10)
 
         # ---------------- Publishers ----------------
-        self.center_pub = self.create_publisher(
-            MarkerArray, '/local_centerline', 10)
         self.left_dbg = self.create_publisher(
             MarkerArray, '/ltm_debug/left_track', 10)
         self.right_dbg = self.create_publisher(
             MarkerArray, '/ltm_debug/right_track', 10)
+        self.center_pub = self.create_publisher(
+            MarkerArray, '/local_centerline', 10)
 
-        # ---------------- State ----------------
-        # (x, y, timestamp)
+        # ---------------- Track State ----------------
+        # Each entry: (x, y, timestamp)
         self.left_track = deque(maxlen=50)
         self.right_track = deque(maxlen=50)
 
         self.assoc_dist = 0.6        # meters
         self.alpha = 0.3             # EMA smoothing
-        self.track_timeout = 1.0     # seconds
+        self.track_timeout = 2.5     # seconds (STABILIZED)
 
         self.timer = self.create_timer(0.1, self.publish_all)
 
-        self.get_logger().info("✅ FSDS Local Track Model running")
+        self.get_logger().info("✅ FSDS Local Track Model (Phase 3 STABILIZED) running")
 
-    # =========================================================
+    # =====================================================
     # Callbacks
-    # =========================================================
+    # =====================================================
 
     def left_cb(self, msg):
-        self.update_track(msg, self.left_track)
+        self.update_track(msg, self.left_track, "LEFT")
 
     def right_cb(self, msg):
-        self.update_track(msg, self.right_track)
+        self.update_track(msg, self.right_track, "RIGHT")
 
-    # =========================================================
+    # =====================================================
     # Core logic
-    # =========================================================
+    # =====================================================
 
-    def update_track(self, msg, track):
+    def update_track(self, msg, track, label):
         now = time.time()
+        updated = False
 
         for m in msg.markers:
+            # 🔴 Ignore visualization housekeeping
+            if m.action != Marker.ADD:
+                continue
+
             x = m.pose.position.x
             y = m.pose.position.y
+
+            # Ignore zero-pose RViz artifacts
+            if abs(x) < 1e-6 and abs(y) < 1e-6:
+                continue
 
             # Forward-only
             if x <= 0.0:
@@ -84,10 +92,15 @@ class LocalTrackModel(Node):
                     ny = self.alpha * y + (1.0 - self.alpha) * ty
                     track[i] = (nx, ny, now)
                     matched = True
+                    updated = True
                     break
 
             if not matched:
                 track.append((x, y, now))
+                updated = True
+
+        if updated:
+            self.get_logger().info(f"{label} track size = {len(track)}")
 
     def prune_tracks(self):
         now = time.time()
@@ -100,14 +113,13 @@ class LocalTrackModel(Node):
             maxlen=50
         )
 
-    # =========================================================
+    # =====================================================
     # Publishing
-    # =========================================================
+    # =====================================================
 
     def publish_all(self):
         self.prune_tracks()
 
-        # Publish debug tracks
         self.publish_track(
             self.left_track, self.left_dbg,
             ns="left_track", color=(0.0, 0.0, 1.0)
@@ -117,7 +129,6 @@ class LocalTrackModel(Node):
             ns="right_track", color=(1.0, 1.0, 0.0)
         )
 
-        # Publish centerline
         self.publish_centerline()
 
     def publish_track(self, track, pub, ns, color):
@@ -130,9 +141,6 @@ class LocalTrackModel(Node):
         now = self.get_clock().now().to_msg()
 
         for i, (x, y, _) in enumerate(track):
-            if x <= 0.0:
-                continue
-
             m = Marker()
             m.header.frame_id = "fsds/FSCar"
             m.header.stamp = now
@@ -146,9 +154,10 @@ class LocalTrackModel(Node):
             m.pose.position.z = 0.15
             m.pose.orientation.w = 1.0
 
-            m.scale.x = 0.30
-            m.scale.y = 0.30
-            m.scale.z = 0.30
+            # Big for debug visibility
+            m.scale.x = 0.45
+            m.scale.y = 0.45
+            m.scale.z = 0.45
 
             m.color.r, m.color.g, m.color.b = color
             m.color.a = 1.0
@@ -163,13 +172,9 @@ class LocalTrackModel(Node):
 
         left = sorted(self.left_track, key=lambda p: p[0])
         right = sorted(self.right_track, key=lambda p: p[0])
-
         n = min(len(left), len(right))
-        if n == 0:
-            return
 
         arr = MarkerArray()
-
         clear = Marker()
         clear.action = Marker.DELETEALL
         arr.markers.append(clear)
@@ -199,11 +204,11 @@ class LocalTrackModel(Node):
             m.pose.position.z = 0.12
             m.pose.orientation.w = 1.0
 
-            # BIG + RED for debugging clarity
             m.scale.x = 0.45
             m.scale.y = 0.45
             m.scale.z = 0.45
 
+            # Red centerline (debug)
             m.color.r = 1.0
             m.color.g = 0.0
             m.color.b = 0.0
