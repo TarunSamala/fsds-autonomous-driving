@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-FSDS Stanley Controller — FINAL (FSDS-BUILD COMPATIBLE)
+FSDS Stanley Controller — SLOW MODE (FINAL)
 
-✔ Uses fs_msgs/ControlCommand
-✔ NO SetControlMode (not supported in your FSDS)
-✔ NO brake latch
-✔ Continuous throttle from startup
-✔ Identical control contract to keyboard_control.py
+✔ FSDS-native ControlCommand
+✔ Continuous publishing (required by FSDS)
+✔ No brake latch
+✔ Soft-start + soft-slowdown
+✔ Target crawl speed ≈ 0.02
+✔ Stable Stanley control at very low speed
 """
 
 import math
@@ -22,17 +23,22 @@ class FSDSStanleyController(Node):
     def __init__(self):
         super().__init__('fsds_stanley_controller')
 
-        # ===== PARAMETERS =====
-        self.k = 1.0
-        self.throttle = 0.35          # MUST be > 0.3 for FSDS
-        self.max_steer = 1.0
+        # ================= CONTROL PARAMETERS =================
+        self.k = 0.8                     # Stanley gain (reduced for slow speed)
+        self.max_steer = 1.0             # FSDS normalized [-1, 1]
 
-        # ===== STATE =====
+        # --- SPEED CONTROL ---
+        self.start_throttle = 0.12       # Minimum FSDS movement threshold
+        self.target_throttle = 0.02      # YOUR requested crawl speed
+        self.throttle_decay = 0.002      # Smooth ramp-down rate
+        self.throttle = self.start_throttle
+
+        # ================= STATE =================
         self.pose = None
         self.yaw = 0.0
         self.centerline = []
 
-        # ===== SUBSCRIPTIONS =====
+        # ================= SUBSCRIPTIONS =================
         self.create_subscription(
             Odometry,
             '/testing_only/odom',
@@ -47,7 +53,7 @@ class FSDSStanleyController(Node):
             10
         )
 
-        # ===== PUBLISHER =====
+        # ================= PUBLISHER =================
         self.cmd_pub = self.create_publisher(
             ControlCommand,
             '/control_command',
@@ -57,9 +63,12 @@ class FSDSStanleyController(Node):
         # Publish continuously at 20 Hz
         self.timer = self.create_timer(0.05, self.control_loop)
 
-        self.get_logger().info("✅ FSDS Stanley Controller RUNNING")
+        self.get_logger().info("✅ FSDS Stanley Controller running (SLOW MODE)")
 
     # ======================================================
+    # CALLBACKS
+    # ======================================================
+
     def odom_cb(self, msg):
         self.pose = msg.pose.pose
         q = self.pose.orientation
@@ -77,18 +86,27 @@ class FSDSStanleyController(Node):
         self.centerline = sorted(pts, key=lambda p: p[0])
 
     # ======================================================
+    # CONTROL LOOP
+    # ======================================================
+
     def control_loop(self):
-        # ALWAYS publish — like keyboard_control.py
+        # Always publish (FSDS requirement)
         cmd = ControlCommand()
         cmd.brake = 0.0
 
+        # ---------- SOFT START / SLOWDOWN ----------
+        if self.throttle > self.target_throttle:
+            self.throttle -= self.throttle_decay
+            self.throttle = max(self.throttle, self.target_throttle)
+
+        # ---------- NO STATE YET ----------
         if self.pose is None or len(self.centerline) < 2:
             cmd.throttle = self.throttle
             cmd.steering = 0.0
             self.cmd_pub.publish(cmd)
             return
 
-        # Lookahead point ~2m
+        # ---------- LOOKAHEAD ----------
         target = None
         for x, y in self.centerline:
             if x > 2.0:
@@ -101,28 +119,33 @@ class FSDSStanleyController(Node):
             self.cmd_pub.publish(cmd)
             return
 
+        # ---------- STANLEY CONTROL ----------
         dx = target[0] - self.pose.position.x
         dy = target[1] - self.pose.position.y
 
         heading_error = math.atan2(dy, dx) - self.yaw
-        heading_error = self.normalize(heading_error)
+        heading_error = self.normalize_angle(heading_error)
 
         cte = dy * math.cos(self.yaw) - dx * math.sin(self.yaw)
 
-        steer = heading_error + math.atan2(self.k * cte, self.throttle)
+        # Protect against near-zero division
+        speed_term = max(self.throttle, 0.05)
+        steer = heading_error + math.atan2(self.k * cte, speed_term)
+
         steer = max(-self.max_steer, min(self.max_steer, steer))
 
+        # ---------- PUBLISH ----------
         cmd.throttle = self.throttle
         cmd.steering = steer
-
         self.cmd_pub.publish(cmd)
 
+    # ======================================================
     @staticmethod
-    def normalize(a):
+    def normalize_angle(a):
         while a > math.pi:
-            a -= 2 * math.pi
+            a -= 2.0 * math.pi
         while a < -math.pi:
-            a += 2 * math.pi
+            a += 2.0 * math.pi
         return a
 
 
