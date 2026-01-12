@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 """
-FSDS Stanley Controller — Phase 4
+FSDS Stanley Controller — Phase 4 (STABLE)
 
-Consumes local centerline markers and outputs steering + throttle.
-Ego-frame, low-speed, stability-first controller.
+Low-speed, FSDS-calibrated Stanley controller.
 """
 
 import math
 import rclpy
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray
-from ackermann_msgs.msg import AckermannDriveStamped
+from fs_msgs.msg import ControlCommand
 
 
 class StanleyController(Node):
     def __init__(self):
         super().__init__('fsds_stanley_controller')
 
-        # ---------- Parameters ----------
-        self.k = 1.2                 # Stanley gain
-        self.max_steer = 0.4         # radians
-        self.target_speed = 2.0      # m/s equivalent throttle
-        self.wheelbase = 0.32        # FSDS approx
+        # ================= FSDS-CALIBRATED PARAMS =================
+        self.k = 0.6                 # Stanley gain (LOW)
+        self.throttle = 0.02         # MATCH keyboard driving
+        self.max_steer = 0.35        # FSDS practical limit
+        self.v_min = 0.05            # velocity floor for Stanley
 
-        # ---------- State ----------
+        # ================= State =================
         self.centerline = []
 
-        # ---------- Subscribers ----------
+        # ================= ROS =================
         self.create_subscription(
             MarkerArray,
             '/local_centerline',
@@ -34,70 +33,62 @@ class StanleyController(Node):
             10
         )
 
-        # ---------- Publisher ----------
         self.cmd_pub = self.create_publisher(
-            AckermannDriveStamped,
-            '/cmd_drive',
+            ControlCommand,
+            '/control_command',
             10
         )
 
         self.timer = self.create_timer(0.05, self.control_step)
 
-        self.get_logger().info("✅ Stanley Controller running")
+        self.get_logger().info("✅ Stanley Controller running (FSDS stable)")
 
-    # ==========================================================
-    # Callbacks
-    # ==========================================================
+    # ------------------------------------------------------------
 
     def centerline_cb(self, msg):
-        points = []
+        pts = []
         for m in msg.markers:
             if m.action != m.ADD:
                 continue
-            points.append((m.pose.position.x, m.pose.position.y))
+            pts.append((m.pose.position.x, m.pose.position.y))
 
-        # Sort forward
-        self.centerline = sorted(points, key=lambda p: p[0])
+        self.centerline = sorted(pts, key=lambda p: p[0])
 
-    # ==========================================================
-    # Control logic
-    # ==========================================================
+    # ------------------------------------------------------------
 
     def control_step(self):
         if len(self.centerline) < 3:
             return
 
-        # Pick a lookahead point (2–4 m ahead)
-        lookahead = None
+        # Lookahead ~1.5–2.0 m
+        target = None
         for x, y in self.centerline:
-            if x > 2.0:
-                lookahead = (x, y)
+            if x > 1.5:
+                target = (x, y)
                 break
 
-        if lookahead is None:
+        if target is None:
             return
 
-        lx, ly = lookahead
+        lx, ly = target
 
-        # Heading error (vehicle faces +X)
+        # Heading error
         heading_error = math.atan2(ly, lx)
 
-        # Cross-track error
+        # Cross-track error (ego frame)
         cte = ly
 
-        # Stanley term
-        stanley_term = math.atan2(self.k * cte, self.target_speed)
+        # Stanley term (stabilized)
+        v = max(self.throttle, self.v_min)
+        stanley_term = math.atan2(self.k * cte, v)
 
         steer = heading_error + stanley_term
-
-        # Clamp steering
         steer = max(-self.max_steer, min(self.max_steer, steer))
 
-        # Publish command
-        cmd = AckermannDriveStamped()
-        cmd.header.stamp = self.get_clock().now().to_msg()
-        cmd.drive.steering_angle = steer
-        cmd.drive.speed = self.target_speed
+        cmd = ControlCommand()
+        cmd.throttle = float(self.throttle)
+        cmd.steering = float(steer)
+        cmd.brake = 0.0
 
         self.cmd_pub.publish(cmd)
 
