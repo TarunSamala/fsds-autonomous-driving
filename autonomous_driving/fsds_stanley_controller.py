@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-FSDS Stanley Controller — SLOW MODE (FINAL)
+FSDS Stanley Controller — GEOMETRY CORRECT (FINAL)
 
-✔ FSDS-native ControlCommand
-✔ Continuous publishing (required by FSDS)
-✔ No brake latch
-✔ Soft-start + soft-slowdown
-✔ Target crawl speed ≈ 0.02
-✔ Stable Stanley control at very low speed
+✔ Closest-segment projection
+✔ Proper signed CTE
+✔ Path tangent heading error
+✔ Slow/snail mode (~0.02)
+✔ FSDS-safe control publishing
 """
 
 import math
@@ -23,14 +22,14 @@ class FSDSStanleyController(Node):
     def __init__(self):
         super().__init__('fsds_stanley_controller')
 
-        # ================= CONTROL PARAMETERS =================
-        self.k = 0.8                     # Stanley gain (reduced for slow speed)
-        self.max_steer = 1.0             # FSDS normalized [-1, 1]
+        # ================= PARAMETERS =================
+        self.k = 1.0
+        self.max_steer = 1.0
 
-        # --- SPEED CONTROL ---
-        self.start_throttle = 0.12       # Minimum FSDS movement threshold
-        self.target_throttle = 0.02      # YOUR requested crawl speed
-        self.throttle_decay = 0.002      # Smooth ramp-down rate
+        # Slow mode
+        self.start_throttle = 0.12
+        self.target_throttle = 0.02
+        self.throttle_decay = 0.002
         self.throttle = self.start_throttle
 
         # ================= STATE =================
@@ -38,7 +37,7 @@ class FSDSStanleyController(Node):
         self.yaw = 0.0
         self.centerline = []
 
-        # ================= SUBSCRIPTIONS =================
+        # ================= SUBSCRIBERS =================
         self.create_subscription(
             Odometry,
             '/testing_only/odom',
@@ -60,14 +59,13 @@ class FSDSStanleyController(Node):
             10
         )
 
-        # Publish continuously at 20 Hz
         self.timer = self.create_timer(0.05, self.control_loop)
 
-        self.get_logger().info("✅ FSDS Stanley Controller running (SLOW MODE)")
+        self.get_logger().info("✅ Stanley Controller (geometry-correct) running")
 
-    # ======================================================
+    # =====================================================
     # CALLBACKS
-    # ======================================================
+    # =====================================================
 
     def odom_cb(self, msg):
         self.pose = msg.pose.pose
@@ -80,73 +78,101 @@ class FSDSStanleyController(Node):
     def centerline_cb(self, msg):
         pts = []
         for m in msg.markers:
-            if m.action != m.ADD:
-                continue
-            pts.append((m.pose.position.x, m.pose.position.y))
-        self.centerline = sorted(pts, key=lambda p: p[0])
+            if m.action == m.ADD:
+                pts.append((m.pose.position.x, m.pose.position.y))
+        self.centerline = pts
 
-    # ======================================================
+    # =====================================================
+    # GEOMETRY HELPERS
+    # =====================================================
+
+    def closest_segment(self, path, px, py):
+        min_dist = float('inf')
+        best_i = 0
+
+        for i in range(len(path) - 1):
+            x1, y1 = path[i]
+            x2, y2 = path[i + 1]
+
+            vx = x2 - x1
+            vy = y2 - y1
+            wx = px - x1
+            wy = py - y1
+
+            seg_len2 = vx * vx + vy * vy
+            if seg_len2 == 0:
+                continue
+
+            t = max(0.0, min(1.0, (wx * vx + wy * vy) / seg_len2))
+            proj_x = x1 + t * vx
+            proj_y = y1 + t * vy
+
+            dx = px - proj_x
+            dy = py - proj_y
+            dist = dx * dx + dy * dy
+
+            if dist < min_dist:
+                min_dist = dist
+                best_i = i
+
+        return best_i
+
+    @staticmethod
+    def normalize(a):
+        while a > math.pi:
+            a -= 2 * math.pi
+        while a < -math.pi:
+            a += 2 * math.pi
+        return a
+
+    # =====================================================
     # CONTROL LOOP
-    # ======================================================
+    # =====================================================
 
     def control_loop(self):
-        # Always publish (FSDS requirement)
         cmd = ControlCommand()
         cmd.brake = 0.0
 
-        # ---------- SOFT START / SLOWDOWN ----------
+        # Smooth throttle ramp
         if self.throttle > self.target_throttle:
-            self.throttle -= self.throttle_decay
-            self.throttle = max(self.throttle, self.target_throttle)
+            self.throttle = max(
+                self.target_throttle,
+                self.throttle - self.throttle_decay
+            )
 
-        # ---------- NO STATE YET ----------
-        if self.pose is None or len(self.centerline) < 2:
+        if self.pose is None or len(self.centerline) < 3:
             cmd.throttle = self.throttle
             cmd.steering = 0.0
             self.cmd_pub.publish(cmd)
             return
 
-        # ---------- LOOKAHEAD ----------
-        target = None
-        for x, y in self.centerline:
-            if x > 2.0:
-                target = (x, y)
-                break
+        px = self.pose.position.x
+        py = self.pose.position.y
 
-        if target is None:
-            cmd.throttle = self.throttle
-            cmd.steering = 0.0
-            self.cmd_pub.publish(cmd)
-            return
+        # --------- Closest segment projection ---------
+        i = self.closest_segment(self.centerline, px, py)
+        x1, y1 = self.centerline[i]
+        x2, y2 = self.centerline[i + 1]
 
-        # ---------- STANLEY CONTROL ----------
-        dx = target[0] - self.pose.position.x
-        dy = target[1] - self.pose.position.y
+        # Path tangent
+        path_yaw = math.atan2(y2 - y1, x2 - x1)
 
-        heading_error = math.atan2(dy, dx) - self.yaw
-        heading_error = self.normalize_angle(heading_error)
+        # Signed cross-track error
+        dx = px - x1
+        dy = py - y1
+        cte = -math.sin(path_yaw) * dx + math.cos(path_yaw) * dy
 
-        cte = dy * math.cos(self.yaw) - dx * math.sin(self.yaw)
+        # Heading error
+        heading_error = self.normalize(path_yaw - self.yaw)
 
-        # Protect against near-zero division
+        # Stanley control law
         speed_term = max(self.throttle, 0.05)
         steer = heading_error + math.atan2(self.k * cte, speed_term)
-
         steer = max(-self.max_steer, min(self.max_steer, steer))
 
-        # ---------- PUBLISH ----------
         cmd.throttle = self.throttle
         cmd.steering = steer
         self.cmd_pub.publish(cmd)
-
-    # ======================================================
-    @staticmethod
-    def normalize_angle(a):
-        while a > math.pi:
-            a -= 2.0 * math.pi
-        while a < -math.pi:
-            a += 2.0 * math.pi
-        return a
 
 
 def main(args=None):
