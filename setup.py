@@ -38,7 +38,8 @@ setup(
             'local_track_model = autonomous_driving.local_track_model:main',
             'fsds_local_track_model = autonomous_driving.fsds_local_track_model:main',
             'fsds_stanley_controller = autonomous_driving.fsds_stanley_controller:main',
-            'fsds_local_track_frame = autonomous_driving.fsds_local_track_frame:main'
+            'fsds_local_track_frame = autonomous_driving.fsds_local_track_frame:main',
+            'fsds_vehicle_footprint.py = autonomous_driving.fsds_vehicle_footprint:main'
         ],
     },
 )
