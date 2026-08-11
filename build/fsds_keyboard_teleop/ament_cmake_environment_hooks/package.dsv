@@ -1,0 +1,4 @@
+source;share/fsds_keyboard_teleop/local_setup.bash
+source;share/fsds_keyboard_teleop/local_setup.dsv
+source;share/fsds_keyboard_teleop/local_setup.sh
+source;share/fsds_keyboard_teleop/local_setup.zsh

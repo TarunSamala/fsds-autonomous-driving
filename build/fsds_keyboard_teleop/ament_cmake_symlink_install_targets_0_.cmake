@@ -1,0 +1,1 @@
+ament_cmake_symlink_install_targets("TARGET_FILES" "/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop/keyboard_teleop" "TARGETS" "keyboard_teleop" "DESTINATION" "lib/fsds_keyboard_teleop")

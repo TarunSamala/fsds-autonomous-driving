@@ -1,0 +1,102 @@
+[0.127s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build', '--base-paths', 'cpp/fsds_keyboard_teleop', '--symlink-install']
+[0.128s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=True, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=16, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['cpp/fsds_keyboard_teleop'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=None, packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, mixin_files=None, mixin=None, verb_parser=<colcon_mixin.mixin.mixin_argument.MixinArgumentDecorator object at 0x7fa3beb567a0>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x7fa3beb562f0>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x7fa3beb562f0>>, mixin_verb=('build',))
+[0.330s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.331s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.331s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.331s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.331s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.331s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop'
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extensions ['ignore', 'ignore_ament_install']
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extension 'ignore'
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extension 'ignore_ament_install'
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extensions ['colcon_pkg']
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extension 'colcon_pkg'
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extensions ['colcon_meta']
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extension 'colcon_meta'
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extensions ['ros']
+[0.331s] Level 1:colcon.colcon_core.package_identification:_identify(cpp/fsds_keyboard_teleop) by extension 'ros'
+[0.347s] DEBUG:colcon.colcon_core.package_identification:Package 'cpp/fsds_keyboard_teleop' with type 'ros.ament_cmake' and name 'fsds_keyboard_teleop'
+[0.348s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.387s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.387s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.389s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 2 installed packages in /home/satvara/Github/Autonomous-kart-Sim/FSDS/ros2/install
+[0.391s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 428 installed packages in /opt/ros/humble
+[0.393s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_args' from command line to 'None'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_target' from command line to 'None'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_clean_cache' from command line to 'False'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_clean_first' from command line to 'False'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'cmake_force_configure' from command line to 'False'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'ament_cmake_args' from command line to 'None'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'catkin_cmake_args' from command line to 'None'
+[0.455s] Level 5:colcon.colcon_core.verb:set package 'fsds_keyboard_teleop' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.455s] DEBUG:colcon.colcon_core.verb:Building package 'fsds_keyboard_teleop' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop', 'merge_install': False, 'path': '/home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop', 'symlink_install': True, 'test_result_base': None}
+[0.455s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.457s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.457s] INFO:colcon.colcon_ros.task.ament_cmake.build:Building ROS package in '/home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop' with build type 'ament_cmake'
+[0.457s] INFO:colcon.colcon_cmake.task.cmake.build:Building CMake package in '/home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop'
+[0.460s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.460s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.460s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.471s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake /home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop
+[2.194s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake /home/satvara/Github/fsds-autonomous-driving/cpp/fsds_keyboard_teleop -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop
+[2.197s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake --build /home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop -- -j16 -l16
+[7.146s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake --build /home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop -- -j16 -l16
+[7.157s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake --install /home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop
+[7.304s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(fsds_keyboard_teleop)
+[7.305s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble DEBUGINFOD_URLS=https://debuginfod.archlinux.org /usr/bin/cmake --install /home/satvara/Github/fsds-autonomous-driving/build/fsds_keyboard_teleop
+[7.308s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop' for CMake module files
+[7.309s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop' for CMake config files
+[7.309s] Level 1:colcon.colcon_core.shell:create_environment_hook('fsds_keyboard_teleop', 'cmake_prefix_path')
+[7.310s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.ps1'
+[7.310s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.dsv'
+[7.311s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.sh'
+[7.312s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib'
+[7.312s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/bin'
+[7.313s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib/pkgconfig/fsds_keyboard_teleop.pc'
+[7.313s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib/python3.10/site-packages'
+[7.313s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/bin'
+[7.314s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.ps1'
+[7.315s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.dsv'
+[7.316s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.sh'
+[7.317s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.bash'
+[7.318s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.zsh'
+[7.319s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/colcon-core/packages/fsds_keyboard_teleop)
+[7.320s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(fsds_keyboard_teleop)
+[7.320s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop' for CMake module files
+[7.321s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop' for CMake config files
+[7.321s] Level 1:colcon.colcon_core.shell:create_environment_hook('fsds_keyboard_teleop', 'cmake_prefix_path')
+[7.321s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.ps1'
+[7.322s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.dsv'
+[7.322s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/hook/cmake_prefix_path.sh'
+[7.323s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib'
+[7.323s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/bin'
+[7.323s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib/pkgconfig/fsds_keyboard_teleop.pc'
+[7.323s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/lib/python3.10/site-packages'
+[7.324s] Level 1:colcon.colcon_core.environment:checking '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/bin'
+[7.324s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.ps1'
+[7.325s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.dsv'
+[7.326s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.sh'
+[7.326s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.bash'
+[7.327s] INFO:colcon.colcon_core.shell:Creating package script '/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/fsds_keyboard_teleop/package.zsh'
+[7.328s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/satvara/Github/fsds-autonomous-driving/install/fsds_keyboard_teleop/share/colcon-core/packages/fsds_keyboard_teleop)
+[7.328s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[7.328s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[7.328s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[7.329s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[7.335s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.notify_send': Could not find 'notify-send'
+[7.335s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[7.335s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[7.336s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[7.360s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[7.360s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/satvara/Github/fsds-autonomous-driving/install/local_setup.ps1'
+[7.361s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/satvara/Github/fsds-autonomous-driving/install/_local_setup_util_ps1.py'
+[7.363s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/satvara/Github/fsds-autonomous-driving/install/setup.ps1'
+[7.364s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/satvara/Github/fsds-autonomous-driving/install/local_setup.sh'
+[7.365s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/satvara/Github/fsds-autonomous-driving/install/_local_setup_util_sh.py'
+[7.366s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/satvara/Github/fsds-autonomous-driving/install/setup.sh'
+[7.367s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/satvara/Github/fsds-autonomous-driving/install/local_setup.bash'
+[7.367s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/satvara/Github/fsds-autonomous-driving/install/setup.bash'
+[7.368s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/satvara/Github/fsds-autonomous-driving/install/local_setup.zsh'
+[7.369s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/satvara/Github/fsds-autonomous-driving/install/setup.zsh'
